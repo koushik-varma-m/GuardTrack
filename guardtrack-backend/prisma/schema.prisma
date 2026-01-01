@@ -1,0 +1,133 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  GUARD
+  ANALYST
+  ADMIN
+}
+
+enum AlertType {
+  ORANGE
+  RED
+}
+
+enum AlertStatus {
+  OPEN
+  RESOLVED
+}
+
+model User {
+  id           String           @id @default(cuid())
+  name         String
+  email        String           @unique
+  phone        String?
+  passwordHash String
+  role         UserRole
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  assignments       GuardAssignment[]
+  analystAssignments AnalystAssignment[]
+  checkIns          CheckIn[]
+  alerts            Alert[]
+}
+
+model Premise {
+  id           String           @id @default(cuid())
+  name         String
+  address      String?
+  mapImageUrl  String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  checkpoints        Checkpoint[]
+  assignments        GuardAssignment[]
+  analystAssignments AnalystAssignment[]
+}
+
+model Checkpoint {
+  id              String           @id @default(cuid())
+  premise         Premise          @relation(fields: [premiseId], references: [id], onDelete: Cascade)
+  premiseId       String
+  name            String
+  description     String?
+  xCoord          Float
+  yCoord          Float
+  sequence        Int              @default(1)
+  intervalMinutes Int?             // Checkpoint-specific scanning interval (minutes). If null, uses assignment's intervalMinutes
+  qrCodeValue     String           @unique
+  orangeAlertSent Boolean          @default(false)
+  redAlertSent    Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  checkIns        CheckIn[]
+  alerts          Alert[]
+}
+
+model GuardAssignment {
+  id              String           @id @default(cuid())
+  guard           User             @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  guardId         String
+  premise         Premise          @relation(fields: [premiseId], references: [id], onDelete: Cascade)
+  premiseId       String
+  startTime       DateTime
+  endTime         DateTime
+  intervalMinutes Int
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  checkIns        CheckIn[]
+  alerts          Alert[]
+}
+
+model CheckIn {
+  id           String           @id @default(cuid())
+  guard        User             @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  guardId      String
+  checkpoint   Checkpoint       @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  checkpointId String
+  assignment   GuardAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignmentId String
+  scannedAt    DateTime
+  isOnTime     Boolean
+  createdAt    DateTime         @default(now())
+}
+
+model Alert {
+  id           String           @id @default(cuid())
+  type         AlertType
+  guard        User             @relation(fields: [guardId], references: [id], onDelete: Cascade)
+  guardId      String
+  checkpoint   Checkpoint       @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  checkpointId String
+  assignment   GuardAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignmentId String
+  triggeredAt  DateTime
+  status       AlertStatus
+  message      String?
+  createdAt    DateTime         @default(now())
+}
+
+model AnalystAssignment {
+  id        String   @id @default(cuid())
+  analyst   User     @relation(fields: [analystId], references: [id], onDelete: Cascade)
+  analystId String
+  premise   Premise  @relation(fields: [premiseId], references: [id], onDelete: Cascade)
+  premiseId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([analystId, premiseId])
+}
