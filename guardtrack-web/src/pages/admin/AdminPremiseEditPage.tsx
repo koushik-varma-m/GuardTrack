@@ -622,6 +622,7 @@ export default function AdminPremiseEditPage() {
                       }}
                     >
                       <ListItemText
+                        disableTypography
                         primary={
                           <Box display="flex" alignItems="center" gap={1}>
                             <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
@@ -643,28 +644,28 @@ export default function AdminPremiseEditPage() {
                         }
                         secondary={
                           <Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {checkpoint.description || 'No description'}
-                          </Typography>
-                          <Box display="flex" gap={1} mt={0.5}>
-                            <Chip
-                              label={`Order: ${checkpoint.sequence || '-'}`}
-                              size="small"
-                              sx={{ fontSize: '0.65rem' }}
-                            />
-                            {checkpoint.intervalMinutes && (
+                            <Typography variant="caption" color="text.secondary">
+                              {checkpoint.description || 'No description'}
+                            </Typography>
+                            <Box display="flex" gap={1} mt={0.5}>
                               <Chip
-                                label={`Travel: ${checkpoint.intervalMinutes}m`}
+                                label={`Order: ${checkpoint.sequence || '-'}`}
                                 size="small"
                                 sx={{ fontSize: '0.65rem' }}
                               />
-                            )}
-                          </Box>
-                          {statusItem && (
-                            <Box mt={0.5}>
-                              <Typography variant="caption" color="text.secondary" display="block">
-                                <strong>Guard:</strong> {statusItem.guardName}
-                              </Typography>
+                              {checkpoint.intervalMinutes && (
+                                <Chip
+                                  label={`Travel: ${checkpoint.intervalMinutes}m`}
+                                  size="small"
+                                  sx={{ fontSize: '0.65rem' }}
+                                />
+                              )}
+                            </Box>
+                            {statusItem && (
+                              <Box mt={0.5}>
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  <strong>Guard:</strong> {statusItem.guardName}
+                                </Typography>
                                 <Typography variant="caption" color="text.secondary" display="block">
                                   <strong>Last Scan:</strong>{' '}
                                   {new Date(statusItem.lastScan).toLocaleString()}

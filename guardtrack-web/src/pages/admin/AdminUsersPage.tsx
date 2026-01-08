@@ -22,8 +22,10 @@ import {
   FormControl,
   InputLabel,
   Chip,
+  IconButton,
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
+import EditIcon from '@mui/icons-material/Edit';
 import { userService } from '../../services/userService';
 import type { User } from '../../services/userService';
 import PageHeader from '../../components/PageHeader';
@@ -33,11 +35,13 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [openDialog, setOpenDialog] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     password: '',
+    rfidTag: '',
     role: 'GUARD' as 'GUARD' | 'ANALYST' | 'ADMIN',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -59,11 +63,13 @@ export default function AdminUsersPage() {
   };
 
   const handleOpenDialog = () => {
+    setEditingUser(null);
     setFormData({
       name: '',
       email: '',
       phone: '',
       password: '',
+      rfidTag: '',
       role: 'GUARD',
     });
     setOpenDialog(true);
@@ -71,11 +77,13 @@ export default function AdminUsersPage() {
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
+    setEditingUser(null);
     setFormData({
       name: '',
       email: '',
       phone: '',
       password: '',
+      rfidTag: '',
       role: 'GUARD',
     });
   };
@@ -83,17 +91,30 @@ export default function AdminUsersPage() {
   const handleSubmit = async () => {
     try {
       setSubmitting(true);
-      await userService.create({
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone || undefined,
-        password: formData.password,
-        role: formData.role,
-      });
+      if (editingUser) {
+        await userService.update(editingUser.id, {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone || undefined,
+          role: formData.role,
+          rfidTag: formData.rfidTag.trim() || null,
+          password: formData.password || undefined,
+        });
+      } else {
+        await userService.create({
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone || undefined,
+          password: formData.password,
+          role: formData.role,
+          rfidTag: formData.rfidTag.trim() || undefined,
+        });
+      }
       handleCloseDialog();
       loadUsers();
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to create user');
+      const fallback = editingUser ? 'Failed to update user' : 'Failed to create user';
+      setError(err.response?.data?.error || err.message || fallback);
     } finally {
       setSubmitting(false);
     }
@@ -151,14 +172,16 @@ export default function AdminUsersPage() {
                 <TableCell>Name</TableCell>
                 <TableCell>Email</TableCell>
                 <TableCell>Phone</TableCell>
+                <TableCell>RFID Tag</TableCell>
                 <TableCell>Role</TableCell>
                 <TableCell>Created</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
                     <Box>
                       <Typography variant="body2" color="text.secondary">
                         No users found
@@ -191,6 +214,11 @@ export default function AdminUsersPage() {
                       </Typography>
                     </TableCell>
                     <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {user.rfidTag || '-'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
                       <Chip
                         label={user.role}
                         color={getRoleColor(user.role)}
@@ -203,6 +231,25 @@ export default function AdminUsersPage() {
                         {new Date(user.createdAt).toLocaleDateString()}
                       </Typography>
                     </TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        aria-label="Edit user"
+                        onClick={() => {
+                          setEditingUser(user);
+                          setFormData({
+                            name: user.name,
+                            email: user.email,
+                            phone: user.phone || '',
+                            password: '',
+                            rfidTag: user.rfidTag || '',
+                            role: user.role,
+                          });
+                          setOpenDialog(true);
+                        }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -212,7 +259,9 @@ export default function AdminUsersPage() {
       </Paper>
 
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>Add New User</DialogTitle>
+        <DialogTitle sx={{ pb: 1 }}>
+          {editingUser ? 'Edit User' : 'Add New User'}
+        </DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 2 }}>
             <TextField
@@ -244,6 +293,15 @@ export default function AdminUsersPage() {
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               placeholder="Optional"
             />
+            <TextField
+              margin="normal"
+              label="RFID Tag"
+              fullWidth
+              variant="outlined"
+              value={formData.rfidTag}
+              onChange={(e) => setFormData({ ...formData, rfidTag: e.target.value })}
+              placeholder="Optional - tap to fill from reader"
+            />
             <FormControl fullWidth margin="normal">
               <InputLabel>Role</InputLabel>
               <Select
@@ -267,8 +325,8 @@ export default function AdminUsersPage() {
               variant="outlined"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              required
-              helperText="Minimum 6 characters"
+              required={!editingUser}
+              helperText={editingUser ? 'Leave blank to keep current password' : 'Minimum 6 characters'}
             />
           </Box>
         </DialogContent>
@@ -282,12 +340,11 @@ export default function AdminUsersPage() {
             disabled={
               !formData.name ||
               !formData.email ||
-              !formData.password ||
               !formData.role ||
               submitting
             }
           >
-            {submitting ? 'Creating...' : 'Create User'}
+            {submitting ? (editingUser ? 'Updating...' : 'Creating...') : editingUser ? 'Update User' : 'Create User'}
           </Button>
         </DialogActions>
       </Dialog>

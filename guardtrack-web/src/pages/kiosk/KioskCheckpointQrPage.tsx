@@ -1,9 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Box, Typography, Paper, CircularProgress } from '@mui/material';
+import {
+  Box,
+  Typography,
+  Paper,
+  CircularProgress,
+  Alert,
+  TextField,
+  Button,
+  Stack,
+} from '@mui/material';
 import axios from 'axios';
 
-const REFRESH_INTERVAL_MS = 30_000; // refresh QR image every 30 seconds
 const STATUS_REFRESH_INTERVAL_MS = 10_000; // refresh status every 10 seconds
 
 interface CheckpointStatus {
@@ -20,53 +28,50 @@ interface CheckpointStatus {
 
 export default function KioskCheckpointQrPage() {
   const { id } = useParams<{ id: string }>();
-  const [qrUrl, setQrUrl] = useState<string>('');
   const [status, setStatus] = useState<CheckpointStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
+  const [rfidValue, setRfidValue] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [lastResult, setLastResult] = useState<{
+    message: string;
+    status: 'GREEN' | 'ORANGE' | 'RED' | 'ERROR';
+    guardName?: string | null;
+    checkpointName?: string;
+    scannedAt?: string;
+  } | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api/v1';
 
-  useEffect(() => {
+  const focusInput = () => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
+  const loadStatus = useCallback(async () => {
     if (!id) return;
-
-    const buildQrUrl = () =>
-      `${API_BASE_URL}/checkpoints/${id}/qr-rotating?t=${Date.now()}`;
-
-    // Initial load
-    setQrUrl(buildQrUrl());
-
-    // Periodically refresh QR to pick up new rotating token
-    const qrInterval = setInterval(() => {
-      setQrUrl(buildQrUrl());
-    }, REFRESH_INTERVAL_MS);
-
-    return () => clearInterval(qrInterval);
-  }, [id, API_BASE_URL]);
+    try {
+      const response = await axios.get<CheckpointStatus>(
+        `${API_BASE_URL}/checkpoints/${id}/status-public`
+      );
+      setStatus(response.data);
+    } catch (error) {
+      console.error('Failed to load checkpoint status:', error);
+    } finally {
+      setLoadingStatus(false);
+    }
+  }, [API_BASE_URL, id]);
 
   useEffect(() => {
-    if (!id) return;
-
-    const loadStatus = async () => {
-      try {
-        const response = await axios.get<CheckpointStatus>(
-          `${API_BASE_URL}/checkpoints/${id}/status-public`
-        );
-        setStatus(response.data);
-      } catch (error) {
-        console.error('Failed to load checkpoint status:', error);
-      } finally {
-        setLoadingStatus(false);
-      }
-    };
-
-    // Initial load
     loadStatus();
-
-    // Periodically refresh status
     const statusInterval = setInterval(loadStatus, STATUS_REFRESH_INTERVAL_MS);
-
     return () => clearInterval(statusInterval);
-  }, [id, API_BASE_URL]);
+  }, [loadStatus]);
+
+  useEffect(() => {
+    focusInput();
+  }, []);
 
   const getStatusColor = (status: 'GREEN' | 'ORANGE' | 'RED' | null) => {
     switch (status) {
@@ -91,6 +96,68 @@ export default function KioskCheckpointQrPage() {
         return 'rgba(244, 67, 54, 0.1)';
       default:
         return 'rgba(158, 158, 158, 0.1)';
+    }
+  };
+
+  const getAlertSeverity = (status: 'GREEN' | 'ORANGE' | 'RED' | 'ERROR') => {
+    switch (status) {
+      case 'GREEN':
+        return 'success';
+      case 'ORANGE':
+        return 'warning';
+      case 'RED':
+        return 'error';
+      default:
+        return 'error';
+    }
+  };
+
+  const handleRfidSubmit = async (rfidTag: string) => {
+    if (!id || !rfidTag) return;
+    setSubmitting(true);
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/kiosk/rfid-checkins`, {
+        rfidTag,
+        checkpointId: id,
+      });
+
+      setLastResult({
+        message: response.data.message,
+        status: response.data.status,
+        guardName: response.data.guardName,
+        checkpointName: response.data.checkpointName,
+        scannedAt: response.data.scannedAt,
+      });
+
+      await loadStatus();
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.error || 'RFID check-in failed. Please try again.';
+      setLastResult({
+        message,
+        status: 'ERROR',
+      });
+    } finally {
+      setSubmitting(false);
+      setRfidValue('');
+      focusInput();
+    }
+  };
+
+  const handleFormSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const trimmed = rfidValue.trim();
+    if (!trimmed || submitting) return;
+    handleRfidSubmit(trimmed);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const trimmed = rfidValue.trim();
+      if (!trimmed || submitting) return;
+      handleRfidSubmit(trimmed);
     }
   };
 
@@ -200,43 +267,81 @@ export default function KioskCheckpointQrPage() {
           </Box>
         ) : null}
 
-        {/* QR Code */}
+        {/* RFID Tap Area */}
         <Box
+          component="form"
+          onSubmit={handleFormSubmit}
+          onClick={focusInput}
           sx={{
             mt: 3,
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            p: 2,
-            backgroundColor: '#f5f5f5',
+            p: 3,
             borderRadius: 2,
+            border: '2px dashed #9e9e9e',
+            backgroundColor: '#fafafa',
+            cursor: 'pointer',
           }}
         >
-          {qrUrl && (
-            <img
-              src={qrUrl}
-              alt="Checkpoint QR"
-              style={{
-                width: 320,
-                height: 320,
-                objectFit: 'contain',
-              }}
+          <Stack spacing={1.5} alignItems="center">
+            <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+              Tap your RFID card to check in
+            </Typography>
+            <Typography variant="body2" color="textSecondary">
+              The field below will capture the tag automatically. Click to refocus if needed.
+            </Typography>
+            <TextField
+              inputRef={inputRef}
+              fullWidth
+              variant="outlined"
+              label="RFID Tag"
+              value={rfidValue}
+              onChange={(e) => setRfidValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={submitting}
+              placeholder="Tap card or type tag ID, then press Enter"
+              autoComplete="off"
             />
-          )}
+            <Button
+              type="submit"
+              variant="contained"
+              size="large"
+              disabled={submitting || !rfidValue.trim()}
+            >
+              {submitting ? 'Processing...' : 'Submit Tap'}
+            </Button>
+          </Stack>
         </Box>
 
+        {/* Last result */}
+        {lastResult && (
+          <Alert
+            severity={getAlertSeverity(lastResult.status)}
+            sx={{ mt: 3, textAlign: 'left' }}
+          >
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+              {lastResult.checkpointName || status?.checkpointName || 'Checkpoint'} —{' '}
+              {lastResult.status}
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 0.5 }}>
+              {lastResult.message}
+            </Typography>
+            {lastResult.guardName && (
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                Guard: {lastResult.guardName}
+              </Typography>
+            )}
+            {lastResult.scannedAt && (
+              <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 0.5 }}>
+                Logged at {new Date(lastResult.scannedAt).toLocaleString()}
+              </Typography>
+            )}
+          </Alert>
+        )}
+
         {/* Instructions */}
-        <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>
-          Scan to Check In
-        </Typography>
-        <Typography variant="caption" color="textSecondary" sx={{ display: 'block' }}>
+        <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 3 }}>
           Status updates automatically every 10 seconds
-        </Typography>
-        <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 0.5 }}>
-          QR code refreshes every 30 minutes
         </Typography>
       </Paper>
     </Box>
   );
 }
-

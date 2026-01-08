@@ -13,7 +13,11 @@ type AlertWithRelations = {
   createdAt: Date;
   guard: { id: string; name: string; email: string; phone: string | null };
   checkpoint: { id: string; name: string };
-  assignment: { id: string; startTime: Date; endTime: Date };
+  assignment: { id: string; startTime: Date; endTime: Date; premiseId: string };
+  escalateRequested: boolean;
+  escalateNote: string | null;
+  escalateBy: string | null;
+  escalatedAt: Date | null;
 };
 
 export async function createAlert(
@@ -53,6 +57,7 @@ export async function createAlert(
           id: true,
           startTime: true,
           endTime: true,
+          premiseId: true,
         },
       },
     },
@@ -62,6 +67,10 @@ export async function createAlert(
   sendEmailStub(alert);
   // Notify guard directly (stub for now)
   sendGuardNotificationStub(alert);
+  // Notify analysts for the premise on RED
+  if (alert.type === 'RED') {
+    await notifyAnalystsStub(alert);
+  }
 
   return alert;
 }
@@ -86,4 +95,28 @@ export function sendGuardNotificationStub(alert: AlertWithRelations): void {
   console.log(`   Message: ${alert.message || 'No message'}`);
   console.log('   Action: Would send in-app alert and SMS to guard.');
   console.log('---');
+}
+
+export async function notifyAnalystsStub(alert: AlertWithRelations): Promise<void> {
+  try {
+    const analysts = await prisma.analystAssignment.findMany({
+      where: { premiseId: alert.assignment.premiseId },
+      include: {
+        analyst: {
+          select: { id: true, name: true, email: true, phone: true },
+        },
+      },
+    });
+    if (!analysts.length) return;
+    analysts.forEach(({ analyst }) => {
+      console.log('📧 [ANALYST NOTIFY STUB]');
+      console.log(`   Analyst: ${analyst.name} (${analyst.email}${analyst.phone ? `, ${analyst.phone}` : ''})`);
+      console.log(`   RED alert at ${alert.checkpoint.name}`);
+      console.log(`   Message: ${alert.message || 'No message'}`);
+      console.log('   Action: Would send email/SMS/in-app notification to analyst.');
+      console.log('---');
+    });
+  } catch (error) {
+    console.error('Failed to notify analysts (stub):', error);
+  }
 }

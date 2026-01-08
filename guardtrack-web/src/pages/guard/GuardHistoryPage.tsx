@@ -102,8 +102,8 @@ export default function GuardHistoryPage() {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={checkIn.isOnTime ? 'Yes' : 'No'}
-                        color={checkIn.isOnTime ? 'success' : 'error'}
+                        label={(checkIn.effectiveOnTime ?? checkIn.isOnTime) ? 'Yes' : 'No'}
+                        color={(checkIn.effectiveOnTime ?? checkIn.isOnTime) ? 'success' : 'error'}
                         size="small"
                       />
                     </TableCell>

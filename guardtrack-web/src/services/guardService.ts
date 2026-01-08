@@ -48,6 +48,14 @@ export interface CheckIn {
   assignmentId: string;
   scannedAt: string;
   isOnTime: boolean;
+  effectiveOnTime?: boolean;
+  status?: 'GREEN' | 'ORANGE' | 'RED';
+  effectiveStatus?: 'GREEN' | 'ORANGE' | 'RED';
+  originalStatus?: 'GREEN' | 'ORANGE' | 'RED';
+  overrideStatus?: 'GREEN';
+  overrideNote?: string | null;
+  overriddenBy?: string | null;
+  overriddenAt?: string | null;
   createdAt: string;
   checkpoint?: {
     id: string;
@@ -111,6 +119,14 @@ export const guardService = {
       payload.token = token;
     }
     const response = await api.post<CheckInResponse>('/me/checkins', payload);
+    return response.data;
+  },
+
+  async createCheckInViaRfid(rfidTag: string, checkpointId: string): Promise<CheckInResponse> {
+    const response = await api.post<CheckInResponse>('/kiosk/rfid-checkins', {
+      rfidTag,
+      checkpointId,
+    });
     return response.data;
   },
 

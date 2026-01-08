@@ -1,0 +1,23 @@
+services:
+  openldap:
+    image: bitnami/openldap:2
+    environment:
+      - LDAP_ROOT=dc=example,dc=com
+      - LDAP_ADMIN_USERNAME=admin
+      - LDAP_ADMIN_PASSWORD=admin
+      - LDAP_USERS=adminuser,analystuser,guarduser
+      - LDAP_PASSWORDS=AdminPass123!,AnalystPass123!,GuardPass123!
+      - LDAP_GROUP=guardtrack
+    ports:
+      - "1389:1389"  # LDAP
+      - "1636:1636"  # LDAPS (self-signed)
+
+  phpldapadmin:
+    image: osixia/phpldapadmin:latest
+    environment:
+      - PHPLDAPADMIN_LDAP_HOSTS=openldap
+      - PHPLDAPADMIN_HTTPS=false
+    ports:
+      - "8081:80"
+    depends_on:
+      - openldap

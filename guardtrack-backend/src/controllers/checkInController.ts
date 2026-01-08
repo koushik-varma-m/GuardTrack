@@ -120,8 +120,8 @@ export async function createCheckIn(req: Request, res: Response) {
       return res.status(400).json({ error: 'Assignment is not currently active' });
     }
 
-    // For now, mark as on time (we'll refine this logic later)
-    const isOnTime = true;
+    // Compute status
+    const originalStatus = 'GREEN';
 
     // Create check-in
     const checkIn = await prisma.checkIn.create({
@@ -130,7 +130,8 @@ export async function createCheckIn(req: Request, res: Response) {
         checkpointId,
         assignmentId: assignment.id,
         scannedAt: now,
-        isOnTime,
+        isOnTime: true,
+        status: originalStatus,
       },
       include: {
         checkpoint: {

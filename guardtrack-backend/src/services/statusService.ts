@@ -185,8 +185,15 @@ export async function computeCheckpointStatus(
       guardId,
     },
     orderBy: { scannedAt: 'desc' },
-    select: { checkpointId: true, scannedAt: true },
+    select: { checkpointId: true, scannedAt: true, overrideStatus: true, status: true },
   });
+
+  const latestForTarget = checkIns.find(
+    (c) => c.checkpointId === checkpointId && c.overrideStatus === 'GREEN'
+  );
+  if (latestForTarget) {
+    return 'GREEN';
+  }
 
   const statuses = buildSequentialStatuses({
     checkpoints,

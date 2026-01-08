@@ -14,8 +14,12 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  TextField,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import { Download as DownloadIcon, QrCode as QrCodeIcon } from '@mui/icons-material';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import PageHeader from '../../components/PageHeader';
 import api from '../../services/api';
 
@@ -38,6 +42,7 @@ export default function AdminQRCodesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedQR, setSelectedQR] = useState<QRCodeData | null>(null);
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
   useEffect(() => {
     if (premiseId) {
@@ -69,6 +74,17 @@ export default function AdminQRCodesPage() {
 
   const handleViewQR = (qrCode: QRCodeData) => {
     setSelectedQR(qrCode);
+  };
+
+  const getNfcUrl = (checkpointId: string) =>
+    `${origin}/guard/nfc-checkin?checkpointId=${checkpointId}`;
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // ignore clipboard failures
+    }
   };
 
   if (loading) {
@@ -166,6 +182,25 @@ export default function AdminQRCodesPage() {
                   >
                     Expires: {new Date(qrCode.qrCodePayload.exp).toLocaleString()}
                   </Typography>
+                  <TextField
+                    label="NFC/URL check-in"
+                    value={getNfcUrl(qrCode.checkpointId)}
+                    InputProps={{
+                      readOnly: true,
+                      endAdornment: (
+                        <Tooltip title="Copy URL">
+                          <IconButton
+                            size="small"
+                            onClick={() => copyToClipboard(getNfcUrl(qrCode.checkpointId))}
+                          >
+                            <ContentCopyIcon fontSize="inherit" />
+                          </IconButton>
+                        </Tooltip>
+                      ),
+                    }}
+                    fullWidth
+                    sx={{ mt: 1 }}
+                  />
                 </CardContent>
               </Card>
             </Grid>
@@ -215,6 +250,27 @@ export default function AdminQRCodesPage() {
               <Typography variant="body2" color="text.secondary">
                 <strong>Expires:</strong> {new Date(selectedQR.qrCodePayload.exp).toLocaleString()}
               </Typography>
+              <TextField
+                label="NFC/URL check-in"
+                value={selectedQR ? getNfcUrl(selectedQR.checkpointId) : ''}
+                InputProps={{
+                  readOnly: true,
+                  endAdornment: (
+                    <Tooltip title="Copy URL">
+                      <IconButton
+                        size="small"
+                        onClick={() =>
+                          selectedQR && copyToClipboard(getNfcUrl(selectedQR.checkpointId))
+                        }
+                      >
+                        <ContentCopyIcon fontSize="inherit" />
+                      </IconButton>
+                    </Tooltip>
+                  ),
+                }}
+                fullWidth
+                sx={{ mt: 2 }}
+              />
             </Box>
           )}
         </DialogContent>
@@ -230,4 +286,3 @@ export default function AdminQRCodesPage() {
     </Box>
   );
 }
-

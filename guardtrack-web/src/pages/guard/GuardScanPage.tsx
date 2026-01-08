@@ -13,11 +13,15 @@ import {
   Alert,
   CircularProgress,
   Chip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import { QrCodeScanner as QrCodeScannerIcon, Edit as EditIcon } from '@mui/icons-material';
 import { Html5Qrcode } from 'html5-qrcode';
 import { guardService } from '../../services/guardService';
-import type { CheckInResponse, NextCheckpointResponse } from '../../services/guardService';
+import type { CheckInResponse, NextCheckpointResponse, Checkpoint } from '../../services/guardService';
 
 export default function GuardScanPage() {
   const [scanning, setScanning] = useState(false);
@@ -26,6 +30,7 @@ export default function GuardScanPage() {
   const [manualDialog, setManualDialog] = useState(false);
   const [manualCheckpointId, setManualCheckpointId] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [rfidSubmitting, setRfidSubmitting] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [lapSnackbar, setLapSnackbar] = useState<{ open: boolean; message: string }>({
     open: false,
@@ -34,11 +39,15 @@ export default function GuardScanPage() {
   const [prevLapNumber, setPrevLapNumber] = useState<number | null>(null);
   const [nextCheckpoint, setNextCheckpoint] = useState<NextCheckpointResponse | null>(null);
   const [loadingNext, setLoadingNext] = useState(false);
+  const [myCheckpoints, setMyCheckpoints] = useState<Checkpoint[]>([]);
+  const [selectedCheckpointId, setSelectedCheckpointId] = useState<string>('');
+  const [rfidTag, setRfidTag] = useState('');
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const qrCodeRegionId = 'qr-reader';
 
   useEffect(() => {
     loadNextCheckpoint();
+    loadCheckpoints();
     return () => {
       // Cleanup scanner on unmount
       if (scannerRef.current) {
@@ -65,11 +74,26 @@ export default function GuardScanPage() {
         setPrevLapNumber(data.lapNumber);
       }
       setNextCheckpoint(data);
+      if (!selectedCheckpointId && data.nextCheckpoint?.id) {
+        setSelectedCheckpointId(data.nextCheckpoint.id);
+      }
     } catch (err: any) {
       // swallow; already enforced by backend on scan
       console.warn('Failed to load next checkpoint', err);
     } finally {
       setLoadingNext(false);
+    }
+  };
+
+  const loadCheckpoints = async () => {
+    try {
+      const checkpoints = await guardService.getMyCheckpoints();
+      setMyCheckpoints(checkpoints);
+      if (!selectedCheckpointId && checkpoints.length > 0) {
+        setSelectedCheckpointId(checkpoints[0].id);
+      }
+    } catch (err: any) {
+      console.warn('Failed to load checkpoints', err);
     }
   };
 
@@ -181,6 +205,35 @@ export default function GuardScanPage() {
       setError(errorMessage);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleRfidSubmit = async () => {
+    const checkpointId = selectedCheckpointId.trim();
+    const tag = rfidTag.trim();
+    if (!checkpointId) {
+      setError('Please select a checkpoint');
+      return;
+    }
+    if (!tag) {
+      setError('Tap your RFID card to fill the tag value');
+      return;
+    }
+    try {
+      setError('');
+      setRfidSubmitting(true);
+      setResult(null);
+      const response = await guardService.createCheckInViaRfid(tag, checkpointId);
+      setResult(response);
+      setSnackbarOpen(true);
+      setRfidTag('');
+      await loadNextCheckpoint();
+    } catch (err: any) {
+      const errorData = err.response?.data;
+      const errorMessage = errorData?.error || err.message || 'RFID check-in failed';
+      setError(errorMessage);
+    } finally {
+      setRfidSubmitting(false);
     }
   };
 
@@ -296,6 +349,62 @@ export default function GuardScanPage() {
             <CircularProgress />
           </Box>
         )}
+      </Paper>
+
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <Typography variant="h6">RFID Check-in</Typography>
+          <Button variant="text" size="small" onClick={loadNextCheckpoint}>
+            Refresh Expected
+          </Button>
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Place your cursor in the field and tap your RFID card; most readers act as a keyboard and fill the tag automatically.
+        </Typography>
+        <Box display="flex" flexDirection="column" gap={2}>
+          <FormControl fullWidth>
+            <InputLabel>Checkpoint</InputLabel>
+            <Select
+              value={selectedCheckpointId}
+              label="Checkpoint"
+              onChange={(e) => setSelectedCheckpointId(e.target.value)}
+            >
+              {myCheckpoints.length === 0 && (
+                <MenuItem value="" disabled>
+                  No checkpoints found
+                </MenuItem>
+              )}
+              {myCheckpoints.map((cp) => (
+                <MenuItem key={cp.id} value={cp.id}>
+                  {cp.sequence ? `${cp.sequence}. ${cp.name}` : cp.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            label="RFID Tag"
+            placeholder="Tap card to fill"
+            value={rfidTag}
+            onChange={(e) => setRfidTag(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleRfidSubmit();
+              }
+            }}
+            autoComplete="off"
+            fullWidth
+            disabled={rfidSubmitting}
+          />
+          <Button
+            variant="contained"
+            size="large"
+            onClick={handleRfidSubmit}
+            disabled={rfidSubmitting}
+          >
+            {rfidSubmitting ? 'Processing...' : 'Submit RFID Check-in'}
+          </Button>
+        </Box>
       </Paper>
 
       {result && (

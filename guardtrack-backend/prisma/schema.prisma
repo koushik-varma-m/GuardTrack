@@ -33,6 +33,7 @@ model User {
   phone        String?
   passwordHash String
   role         UserRole
+  rfidTag      String?          @unique
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
@@ -102,6 +103,11 @@ model CheckIn {
   assignmentId String
   scannedAt    DateTime
   isOnTime     Boolean
+  status       String
+  overrideStatus String?
+  overrideNote  String?
+  overriddenBy  String?
+  overriddenAt  DateTime?
   createdAt    DateTime         @default(now())
 }
 
@@ -117,6 +123,10 @@ model Alert {
   triggeredAt  DateTime
   status       AlertStatus
   message      String?
+  escalateRequested Boolean     @default(false)
+  escalateNote String?
+  escalateBy  String?
+  escalatedAt DateTime?
   createdAt    DateTime         @default(now())
 }
 

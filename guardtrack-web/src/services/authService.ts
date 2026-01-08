@@ -11,6 +11,7 @@ export interface User {
   email: string;
   phone?: string;
   role: 'GUARD' | 'ANALYST' | 'ADMIN';
+  rfidTag?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -20,12 +21,18 @@ export interface LoginResponse {
   user: User;
 }
 
+export interface LdapLoginCredentials {
+  username: string;
+  password: string;
+}
+
 export interface SignupData {
   name: string;
   email: string;
   phone?: string;
   password: string;
   role: 'GUARD' | 'ANALYST' | 'ADMIN';
+  rfidTag?: string;
 }
 
 export const authService = {
@@ -62,6 +69,7 @@ export const authService = {
     phone?: string;
     password: string;
     role: 'GUARD' | 'ANALYST' | 'ADMIN';
+    rfidTag?: string;
   }): Promise<User> {
     const response = await api.post<User>('/auth/register', userData);
     return response.data;
@@ -79,5 +87,15 @@ export const authService = {
   getUser(): User | null {
     const userStr = localStorage.getItem('user');
     return userStr ? JSON.parse(userStr) : null;
+  },
+
+  async ldapLogin(username: string, password: string): Promise<LoginResponse> {
+    const response = await api.post<LoginResponse>('/auth/ldap-login', { username, password });
+
+    const { user, token } = response.data;
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(user));
+
+    return response.data;
   },
 };

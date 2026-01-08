@@ -28,6 +28,7 @@ import GuardDashboardPage from './pages/guard/GuardDashboardPage';
 import GuardCheckpointsPage from './pages/guard/GuardCheckpointsPage';
 import GuardScanPage from './pages/guard/GuardScanPage';
 import GuardHistoryPage from './pages/guard/GuardHistoryPage';
+import GuardNfcCheckInPage from './pages/guard/GuardNfcCheckInPage';
 
 // Kiosk Pages (public)
 import KioskCheckpointQrPage from './pages/kiosk/KioskCheckpointQrPage';
@@ -85,6 +86,7 @@ function App() {
             <Route path="checkpoints" element={<GuardCheckpointsPage />} />
             <Route path="scan" element={<GuardScanPage />} />
             <Route path="history" element={<GuardHistoryPage />} />
+            <Route path="nfc-checkin" element={<GuardNfcCheckInPage />} />
             <Route index element={<Navigate to="/guard/dashboard" replace />} />
           </Route>
 

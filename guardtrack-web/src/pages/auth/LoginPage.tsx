@@ -14,6 +14,8 @@ import {
   Card,
   CardActionArea,
   CardContent,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import {
   AdminPanelSettings as AdminIcon,
@@ -31,10 +33,13 @@ const QUICK_LOGINS = {
 };
 
 export default function LoginPage() {
+  const ldapEnabled = import.meta.env.VITE_ENABLE_LDAP_LOGIN === 'true';
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginMode, setLoginMode] = useState<'local' | 'ldap'>(ldapEnabled ? 'ldap' : 'local');
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -44,7 +49,10 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await authService.login(email, password);
+      const response =
+        loginMode === 'ldap'
+          ? await authService.ldapLogin(username || email, password)
+          : await authService.login(email, password);
       
       // Save via AuthContext.login
       login(response.user, response.token);
@@ -221,18 +229,48 @@ export default function LoginPage() {
               {error}
             </Alert>
           )}
+          {ldapEnabled && (
+            <Box display="flex" justifyContent="center" sx={{ mb: 2 }}>
+              <ToggleButtonGroup
+                value={loginMode}
+                exclusive
+                onChange={(_, value) => {
+                  if (!value) return;
+                  setLoginMode(value);
+                  setError('');
+                }}
+                size="small"
+              >
+                <ToggleButton value="local">Local</ToggleButton>
+                <ToggleButton value="ldap">LDAP</ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+          )}
           <form onSubmit={handleSubmit}>
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              autoFocus
-            />
+            {loginMode === 'ldap' ? (
+              <TextField
+                margin="normal"
+                required
+                fullWidth
+                label="LDAP Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoFocus
+              />
+            ) : (
+              <TextField
+                margin="normal"
+                required
+                fullWidth
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                autoFocus
+              />
+            )}
             <TextField
               margin="normal"
               required

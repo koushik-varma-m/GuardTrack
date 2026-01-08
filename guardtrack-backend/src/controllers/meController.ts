@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/prisma';
-import { computeCheckpointStatus } from '../services/statusService';
-import { verifyCheckpointToken } from '../utils/qr';
+import { processCheckIn, HttpError } from '../services/checkInProcessor';
 
 export async function getProfile(req: Request, res: Response) {
   try {
@@ -68,10 +67,14 @@ export async function getActiveAssignment(req: Request, res: Response) {
     });
 
     if (!assignment) {
-      return res.status(404).json({ error: 'No active assignment found' });
+      return res.json({
+        hasActiveAssignment: false,
+        message: 'No active assignment found',
+      });
     }
 
     res.json({
+      hasActiveAssignment: true,
       id: assignment.id,
       premise: assignment.premise,
       startTime: assignment.startTime,
@@ -158,213 +161,16 @@ export async function createMyCheckIn(req: Request, res: Response) {
       return res.status(400).json({ error: 'checkpointId is required' });
     }
 
-    // Verify checkpoint exists
-    const checkpoint = await prisma.checkpoint.findUnique({
-      where: { id: checkpointId },
-      include: {
-        premise: true,
-      },
-    });
-
-    if (!checkpoint) {
-      return res.status(404).json({ error: 'Checkpoint not found' });
-    }
-
-    // If QR_SECRET is configured, enforce rotating token validation.
-    // This prevents old screenshots / prints from being reused.
-    if (process.env.QR_SECRET) {
-      if (!token || typeof token !== 'string') {
-        return res.status(400).json({ error: 'QR token is required' });
-      }
-
-      const isValidToken = verifyCheckpointToken(checkpointId, token);
-      if (!isValidToken) {
-        return res.status(400).json({ error: 'QR token is invalid or expired' });
-      }
-    }
-
-    // CRITICAL: Verify guard is assigned to this premise before allowing check-in
-    const now = new Date();
-
-    // First, verify the guard exists and has GUARD role
-    const guard = await prisma.user.findUnique({
-      where: { id: guardId },
-      select: { id: true, role: true, name: true },
-    });
-
-    if (!guard || guard.role !== 'GUARD') {
-      return res.status(403).json({
-        error: 'Access denied. Only assigned guards can scan checkpoints.',
-        code: 'GUARD_ROLE_REQUIRED',
-      });
-    }
-
-    // Find active assignment for this guard and premise
-    const assignment = await prisma.guardAssignment.findFirst({
-      where: {
-        guardId,
-        premiseId: checkpoint.premiseId,
-        startTime: {
-          lte: now,
-        },
-        endTime: {
-          gte: now,
-        },
-      },
-      include: {
-        premise: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
-
-    if (!assignment) {
-      // Check if guard has any assignments (to provide better error message)
-      const anyAssignment = await prisma.guardAssignment.findFirst({
-        where: { guardId },
-        include: {
-          premise: {
-            select: { id: true, name: true },
-          },
-        },
-      });
-
-      if (!anyAssignment) {
-        return res.status(403).json({
-          error: 'You are not assigned to any premise. Please contact your supervisor.',
-          code: 'NO_ASSIGNMENT',
-        });
-      }
-
-      // Check if assignment exists but is not active
-      const inactiveAssignment = await prisma.guardAssignment.findFirst({
-        where: {
-          guardId,
-          premiseId: checkpoint.premiseId,
-        },
-      });
-
-      if (inactiveAssignment) {
-        const isFuture = inactiveAssignment.startTime > now;
-        const isPast = inactiveAssignment.endTime < now;
-        
-        if (isFuture) {
-          return res.status(403).json({
-            error: `Your assignment for "${checkpoint.premise.name}" starts at ${inactiveAssignment.startTime.toLocaleString()}. You cannot scan checkpoints before your shift starts.`,
-            code: 'ASSIGNMENT_NOT_STARTED',
-            assignmentStartTime: inactiveAssignment.startTime,
-          });
-        }
-        
-        if (isPast) {
-          return res.status(403).json({
-            error: `Your assignment for "${checkpoint.premise.name}" ended at ${inactiveAssignment.endTime.toLocaleString()}. You cannot scan checkpoints after your shift ends.`,
-            code: 'ASSIGNMENT_ENDED',
-            assignmentEndTime: inactiveAssignment.endTime,
-          });
-        }
-      }
-
-      return res.status(403).json({
-        error: `You are not assigned to "${checkpoint.premise.name}". Only guards assigned to this premise can scan its checkpoints.`,
-        code: 'NOT_ASSIGNED_TO_PREMISE',
-        checkpointPremise: checkpoint.premise.name,
-      });
-    }
-
-    // Enforce sequential scanning order based on checkpoint.sequence
-    const premiseCheckpoints = await prisma.checkpoint.findMany({
-      where: { premiseId: checkpoint.premiseId },
-      select: { id: true, sequence: true, name: true },
-      orderBy: { sequence: 'asc' },
-    });
-
-    const targetCheckpoint = premiseCheckpoints.find((c) => c.id === checkpointId);
-    if (!targetCheckpoint || !targetCheckpoint.sequence) {
-      return res.status(400).json({
-        error: 'Checkpoint sequence not configured. Please contact an administrator.',
-        code: 'SEQUENCE_NOT_CONFIGURED',
-      });
-    }
-
-    // Enforce cyclic sequential scanning: after last checkpoint, loop back to the first.
-    const lastCheckIn = await prisma.checkIn.findFirst({
-      where: {
-        guardId,
-        assignmentId: assignment.id,
-      },
-      orderBy: {
-        scannedAt: 'desc',
-      },
-      include: {
-        checkpoint: {
-          select: { id: true, sequence: true, name: true },
-        },
-      },
-    });
-
-    const orderedCheckpoints = premiseCheckpoints.filter((c) => c.sequence).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-    const expectedCheckpoint = (() => {
-      if (!lastCheckIn || !lastCheckIn.checkpoint?.sequence) {
-        return orderedCheckpoints[0];
-      }
-      const currentIndex = orderedCheckpoints.findIndex((c) => c.id === lastCheckIn.checkpoint.id);
-      if (currentIndex === -1) return orderedCheckpoints[0];
-      const nextIndex = (currentIndex + 1) % orderedCheckpoints.length;
-      return orderedCheckpoints[nextIndex];
-    })();
-
-    if (expectedCheckpoint && expectedCheckpoint.id !== checkpointId) {
-      return res.status(400).json({
-        error: `Please scan checkpoints in order. Next expected checkpoint: "${expectedCheckpoint.name}".`,
-        code: 'SEQUENCE_ENFORCED',
-        nextCheckpointId: expectedCheckpoint.id,
-        nextCheckpointName: expectedCheckpoint.name,
-      });
-    }
-
-    // Compute status before creating check-in
-    const status = await computeCheckpointStatus(guardId, checkpointId, assignment.id, now);
-
-    // Determine if on time (GREEN means on time)
-    const isOnTime = status === 'GREEN';
-
-    // Create check-in
-    const checkIn = await prisma.checkIn.create({
-      data: {
-        guardId,
-        checkpointId,
-        assignmentId: assignment.id,
-        scannedAt: now,
-        isOnTime,
-      },
-    });
-
-    // Generate message based on status
-    let message = '';
-    if (status === 'GREEN') {
-      message = `Check-in successful at "${checkpoint.name}". On time.`;
-    } else if (status === 'ORANGE') {
-      message = `Check-in successful at "${checkpoint.name}", but overdue. Please catch up.`;
-    } else {
-      message = `Check-in successful at "${checkpoint.name}", but critically overdue. Please contact supervisor.`;
-    }
-
-    res.status(201).json({
-      success: true,
-      checkpointName: checkpoint.name,
-      premiseName: checkpoint.premise.name,
-      guardName: guard.name,
-      assignmentId: assignment.id,
-      scannedAt: checkIn.scannedAt,
-      isOnTime,
-      status,
-      message,
-    });
+    const result = await processCheckIn({ guardId, checkpointId, token });
+    res.status(201).json(result);
   } catch (error) {
+    if (error instanceof HttpError) {
+      return res.status(error.status).json({
+        error: error.message,
+        ...(error.code ? { code: error.code } : {}),
+        ...(error.details ? error.details : {}),
+      });
+    }
     if (error instanceof Error && error.message === 'Checkpoint interval not configured') {
       return res.status(400).json({
         error: 'Checkpoint intervals not configured. Please ask an administrator to set intervals for all checkpoints.',
@@ -568,7 +374,19 @@ export async function getMyCheckInHistory(req: Request, res: Response) {
       },
     });
 
-    res.json(checkIns);
+    const mapped = checkIns.map((c) => {
+      const effectiveStatus = (c.overrideStatus as any) || (c.status as any) || 'GREEN';
+      const originalStatus = (c.status as any) || 'GREEN';
+      const effectiveOnTime = effectiveStatus === 'GREEN';
+      return {
+        ...c,
+        effectiveStatus,
+        originalStatus,
+        effectiveOnTime,
+      };
+    });
+
+    res.json(mapped);
   } catch (error) {
     console.error('Get check-in history error:', error);
     res.status(500).json({ error: 'Failed to fetch check-in history' });
@@ -657,6 +475,9 @@ export async function getNextCheckpoint(req: Request, res: Response) {
       where: {
         guardId,
         assignmentId: assignment.id,
+        scannedAt: {
+          gte: assignment.startTime,
+        },
       },
       orderBy: { scannedAt: 'desc' },
       include: {
@@ -668,6 +489,9 @@ export async function getNextCheckpoint(req: Request, res: Response) {
       where: {
         guardId,
         assignmentId: assignment.id,
+        scannedAt: {
+          gte: assignment.startTime,
+        },
       },
     });
 

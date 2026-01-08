@@ -9,8 +9,10 @@ import checkpointRoutes from './routes/checkpointRoutes';
 import assignmentRoutes from './routes/assignmentRoutes';
 import analystAssignmentRoutes from './routes/analystAssignmentRoutes';
 import checkInRoutes from './routes/checkInRoutes';
+import kioskRoutes from './routes/kioskRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import alertRoutes from './routes/alertRoutes';
+import overrideRoutes from './routes/overrideRoutes';
 import meRoutes from './routes/meRoutes';
 import { startIntervalChecker } from './cron/intervalChecker';
 
@@ -46,8 +48,10 @@ app.use('/api/v1/checkpoints', checkpointRoutes);
 app.use('/api/v1/assignments', assignmentRoutes);
 app.use('/api/v1/analyst-assignments', analystAssignmentRoutes);
 app.use('/api/v1/checkins', checkInRoutes);
+app.use('/api/v1/kiosk', kioskRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);
 app.use('/api/v1/alerts', alertRoutes);
+app.use('/api/v1', overrideRoutes);
 app.use('/api/v1/me', meRoutes);
 
 // 404 handler
@@ -71,4 +75,3 @@ app.listen(PORT, () => {
   // Start cron jobs
   startIntervalChecker();
 });
-
