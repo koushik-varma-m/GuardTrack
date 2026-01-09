@@ -15,6 +15,12 @@ export default defineConfig([
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
     ],
+    rules: {
+      // Keep the signal without blocking builds on incremental typing cleanup.
+      '@typescript-eslint/no-explicit-any': 'warn',
+      // AuthContext exports a hook/provider which is a common pattern.
+      'react-refresh/only-export-components': 'off',
+    },
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,

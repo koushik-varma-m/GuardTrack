@@ -1,5 +1,4 @@
 import { prisma } from '../config/prisma';
-import { computeCheckpointStatus } from './statusService';
 import { verifyCheckpointToken } from '../utils/qr';
 
 export class HttpError extends Error {
@@ -48,6 +47,8 @@ export async function processCheckIn({
   token,
   skipTokenValidation = false,
 }: ProcessCheckInInput): Promise<CheckInResult> {
+  const toMs = (minutes: number) => minutes * 60_000;
+  const orangeThresholdMs = toMs(5);
   const checkpoint = await prisma.checkpoint.findUnique({
     where: { id: checkpointId },
     include: {
@@ -164,7 +165,7 @@ export async function processCheckIn({
 
   const premiseCheckpoints = await prisma.checkpoint.findMany({
     where: { premiseId: checkpoint.premiseId },
-    select: { id: true, sequence: true, name: true },
+    select: { id: true, sequence: true, name: true, intervalMinutes: true },
     orderBy: [
       { sequence: 'asc' },
       { name: 'asc' },
@@ -182,7 +183,11 @@ export async function processCheckIn({
 
   const orderedCheckpoints = premiseCheckpoints
     .filter((c) => c.sequence)
-    .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    .sort((a, b) => {
+      const seq = (a.sequence ?? 0) - (b.sequence ?? 0);
+      if (seq !== 0) return seq;
+      return a.name.localeCompare(b.name);
+    });
 
   const lastCheckIn = await prisma.checkIn.findFirst({
     where: {
@@ -195,43 +200,118 @@ export async function processCheckIn({
     orderBy: {
       scannedAt: 'desc',
     },
-    include: {
-      checkpoint: {
-        select: { id: true, sequence: true, name: true },
-      },
+    select: {
+      checkpointId: true,
+      scannedAt: true,
     },
   });
 
-  const expectedCheckpoint = (() => {
-    if (!lastCheckIn || !lastCheckIn.checkpoint?.sequence) {
-      return orderedCheckpoints[0];
-    }
-    const currentIndex = orderedCheckpoints.findIndex((c) => c.id === lastCheckIn.checkpoint.id);
+  const expectedFromCheckIn = (() => {
+    if (!lastCheckIn) return orderedCheckpoints[0];
+    const currentIndex = orderedCheckpoints.findIndex((c) => c.id === lastCheckIn.checkpointId);
     if (currentIndex === -1) return orderedCheckpoints[0];
     const nextIndex = (currentIndex + 1) % orderedCheckpoints.length;
     return orderedCheckpoints[nextIndex];
   })();
 
-  if (expectedCheckpoint && expectedCheckpoint.id !== checkpointId) {
-    throw new HttpError(400, `Please scan checkpoints in order. Next expected checkpoint: "${expectedCheckpoint.name}".`, 'SEQUENCE_ENFORCED', {
-      nextCheckpointId: expectedCheckpoint.id,
-      nextCheckpointName: expectedCheckpoint.name,
-    });
-  }
+  const resolvedExpected = await prisma.alert.findFirst({
+    where: {
+      guardId,
+      assignmentId: assignment.id,
+      checkpointId: expectedFromCheckIn.id,
+      status: 'RESOLVED',
+      resolvedAt: { not: null, gte: lastCheckIn?.scannedAt ?? assignment.startTime },
+    },
+    orderBy: {
+      resolvedAt: 'desc',
+    },
+    select: {
+      resolvedAt: true,
+    },
+  });
 
-  const originalStatus = await computeCheckpointStatus(guardId, checkpointId, assignment.id, now);
-  const autoOverride =
-    originalStatus === 'ORANGE'
-      ? {
-          overrideStatus: 'GREEN' as const,
-          overrideNote: 'Auto-cleared: scanned before RED threshold',
-          overriddenBy: null,
-          overriddenAt: now,
-        }
+  const lastProgress = resolvedExpected?.resolvedAt
+    ? { checkpointId: expectedFromCheckIn.id, at: resolvedExpected.resolvedAt }
+    : lastCheckIn
+      ? { checkpointId: lastCheckIn.checkpointId, at: lastCheckIn.scannedAt }
       : null;
 
-  const effectiveStatus = autoOverride?.overrideStatus || originalStatus;
-  const isOnTime = effectiveStatus === 'GREEN';
+  const expectedCheckpoint = (() => {
+    if (!lastProgress) {
+      return orderedCheckpoints[0];
+    }
+    const currentIndex = orderedCheckpoints.findIndex((c) => c.id === lastProgress.checkpointId);
+    if (currentIndex === -1) return orderedCheckpoints[0];
+    const nextIndex = (currentIndex + 1) % orderedCheckpoints.length;
+    return orderedCheckpoints[nextIndex];
+  })();
+
+  const expectedDueTime = (() => {
+    if (!expectedCheckpoint) return null;
+    const intervalMinutes = expectedCheckpoint.intervalMinutes ?? assignment.intervalMinutes;
+    if (intervalMinutes === null || intervalMinutes === undefined) {
+      throw new Error('Checkpoint interval not configured');
+    }
+    if (!lastProgress) {
+      return assignment.startTime;
+    }
+    return new Date(lastProgress.at.getTime() + toMs(intervalMinutes));
+  })();
+
+  // Enforce timing: don't allow scanning before the next checkpoint is due.
+  if (expectedCheckpoint && expectedDueTime && now.getTime() < expectedDueTime.getTime()) {
+    throw new HttpError(
+      400,
+      `Not due yet. Please wait until ${expectedDueTime.toLocaleTimeString()} to scan "${expectedCheckpoint.name}".`,
+      'CHECKPOINT_NOT_DUE',
+      {
+        nextCheckpointId: expectedCheckpoint.id,
+        nextCheckpointName: expectedCheckpoint.name,
+        dueTime: expectedDueTime,
+      }
+    );
+  }
+
+  // Enforce sequence after the checkpoint is due
+  if (expectedCheckpoint && expectedCheckpoint.id !== checkpointId) {
+    throw new HttpError(
+      400,
+      `Please scan checkpoints in order. Next expected checkpoint: "${expectedCheckpoint.name}".`,
+      'SEQUENCE_ENFORCED',
+      {
+        nextCheckpointId: expectedCheckpoint.id,
+        nextCheckpointName: expectedCheckpoint.name,
+        ...(expectedDueTime ? { dueTime: expectedDueTime } : {}),
+      }
+    );
+  }
+
+  const originalStatus = (() => {
+    if (!expectedDueTime) return 'GREEN' as const;
+    const nowMs = now.getTime();
+    const dueMs = expectedDueTime.getTime();
+    if (nowMs <= dueMs) return 'GREEN' as const;
+    if (nowMs <= dueMs + orangeThresholdMs) return 'ORANGE' as const;
+    return 'RED' as const;
+  })();
+
+  // Once a guard scans, the checkpoint is "cleared" and the route advances.
+  // We still store the original overdue severity for analytics.
+  const effectiveStatus = 'GREEN' as const;
+  const isOnTime = originalStatus !== 'RED';
+
+  const autoOverride =
+    originalStatus === 'GREEN'
+      ? null
+      : {
+          overrideStatus: 'GREEN' as const,
+          overrideNote:
+            originalStatus === 'ORANGE'
+              ? 'Cleared: scanned after due time'
+              : 'Cleared: scanned after critical overdue',
+          overriddenBy: null,
+          overriddenAt: now,
+        };
 
   const checkIn = await prisma.checkIn.create({
     data: {
@@ -250,11 +330,13 @@ export async function processCheckIn({
 
   let message = '';
   if (effectiveStatus === 'GREEN') {
-    message = `Check-in successful at "${checkpoint.name}". On time.`;
-  } else if (effectiveStatus === 'ORANGE') {
-    message = `Check-in successful at "${checkpoint.name}", but overdue. Please catch up.`;
+    if (originalStatus === 'GREEN') {
+      message = `Check-in successful at "${checkpoint.name}".`;
+    } else {
+      message = `Check-in recorded at "${checkpoint.name}". Cleared from ${originalStatus}.`;
+    }
   } else {
-    message = `Check-in successful at "${checkpoint.name}", but critically overdue. Please contact supervisor.`;
+    message = `Check-in successful at "${checkpoint.name}".`;
   }
 
   return {

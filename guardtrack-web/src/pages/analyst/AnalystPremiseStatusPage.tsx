@@ -29,34 +29,87 @@ export default function AnalystPremiseStatusPage() {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [statusItems, setStatusItems] = useState<PremiseStatusItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [error, setError] = useState('');
   const imageRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     if (id) {
-      loadData();
-      // Auto-refresh every 30 seconds
-      const interval = setInterval(loadData, 30000);
-      return () => clearInterval(interval);
+      let cancelled = false;
+
+      const loadPremiseOnce = async () => {
+        try {
+          setLoading(true);
+          const premiseData = await premiseService.getById(id);
+          if (cancelled) return;
+          setPremise(premiseData);
+          setCheckpoints(premiseData.checkpoints || []);
+        } catch (err: any) {
+          if (cancelled) return;
+          setError(err.response?.data?.error || err.message || 'Failed to load premise');
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      };
+
+      const loadStatus = async (opts?: { silent?: boolean }) => {
+        try {
+          if (!opts?.silent) setRefreshing(true);
+          const statusData = await dashboardService.getPremiseStatus(id);
+          if (cancelled) return;
+          setStatusItems(statusData);
+          setLastUpdatedAt(new Date());
+        } catch (err: any) {
+          if (cancelled) return;
+          setError(err.response?.data?.error || err.message || 'Failed to load status');
+        } finally {
+          if (!cancelled) setRefreshing(false);
+        }
+      };
+
+      void loadPremiseOnce().then(() => loadStatus({ silent: true }));
+
+      const configuredMs = Number(import.meta.env.VITE_STATUS_POLL_MS);
+      const pollMs = Number.isFinite(configuredMs) ? configuredMs : 5000;
+      const clampedPollMs = Math.min(60_000, Math.max(2000, pollMs));
+
+      const interval = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          void loadStatus({ silent: true });
+        }
+      }, clampedPollMs);
+
+      const onFocus = () => void loadStatus({ silent: true });
+      const onVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          void loadStatus({ silent: true });
+        }
+      };
+
+      window.addEventListener('focus', onFocus);
+      document.addEventListener('visibilitychange', onVisibilityChange);
+
+      return () => {
+        cancelled = true;
+        clearInterval(interval);
+        window.removeEventListener('focus', onFocus);
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      };
     }
   }, [id]);
 
-  const loadData = async () => {
+  const refreshNow = async () => {
     if (!id) return;
-    
     try {
-      setLoading(true);
-      const [premiseData, statusData] = await Promise.all([
-        premiseService.getById(id),
-        dashboardService.getPremiseStatus(id),
-      ]);
-      setPremise(premiseData);
-      setCheckpoints(premiseData.checkpoints || []);
+      setRefreshing(true);
+      const statusData = await dashboardService.getPremiseStatus(id);
       setStatusItems(statusData);
+      setLastUpdatedAt(new Date());
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to load data');
+      setError(err.response?.data?.error || err.message || 'Failed to refresh status');
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -104,6 +157,8 @@ export default function AnalystPremiseStatusPage() {
     return 'GREEN';
   };
 
+  const lastUpdatedText = lastUpdatedAt ? lastUpdatedAt.toLocaleTimeString() : '—';
+
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -116,14 +171,19 @@ export default function AnalystPremiseStatusPage() {
           </Button>
           <Typography variant="h4">Premise Status: {premise.name}</Typography>
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={loadData}
-          disabled={loading}
-        >
-          {loading ? 'Refreshing...' : 'Refresh'}
-        </Button>
+        <Box display="flex" alignItems="center" gap={1.5}>
+          <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+            Updated: {lastUpdatedText}
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={refreshNow}
+            disabled={loading || refreshing}
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        </Box>
       </Box>
 
       {error && (

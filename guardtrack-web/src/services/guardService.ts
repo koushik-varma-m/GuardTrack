@@ -108,6 +108,9 @@ export const guardService = {
     checkpointName?: string;
     premiseName?: string;
     message?: string;
+    nextCheckpointId?: string;
+    nextCheckpointName?: string;
+    dueTime?: string;
   }> {
     const response = await api.get(`/me/checkpoints/can-scan?checkpointId=${checkpointId}`);
     return response.data;

@@ -93,6 +93,7 @@ export async function getAlerts(req: Request, res: Response) {
 export async function resolveAlert(req: Request, res: Response) {
   try {
     const { id } = req.params;
+    const resolvedBy = req.user?.id ?? null;
 
     const alert = await prisma.alert.findUnique({
       where: { id },
@@ -110,6 +111,8 @@ export async function resolveAlert(req: Request, res: Response) {
       where: { id },
       data: {
         status: 'RESOLVED',
+        resolvedAt: new Date(),
+        resolvedBy,
       },
       include: {
         guard: {

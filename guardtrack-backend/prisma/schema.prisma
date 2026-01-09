@@ -122,6 +122,8 @@ model Alert {
   assignmentId String
   triggeredAt  DateTime
   status       AlertStatus
+  resolvedAt   DateTime?
+  resolvedBy   String?
   message      String?
   escalateRequested Boolean     @default(false)
   escalateNote String?

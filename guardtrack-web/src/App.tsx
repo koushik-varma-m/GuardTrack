@@ -32,14 +32,19 @@ import GuardNfcCheckInPage from './pages/guard/GuardNfcCheckInPage';
 
 // Kiosk Pages (public)
 import KioskCheckpointQrPage from './pages/kiosk/KioskCheckpointQrPage';
+import HomeRedirect from './pages/HomeRedirect';
+import AccessDeniedPage from './pages/errors/AccessDeniedPage';
+import NotFoundPage from './pages/errors/NotFoundPage';
 
 function App() {
+  const signupEnabled = import.meta.env.VITE_ENABLE_SIGNUP === 'true';
+
   return (
     <BrowserRouter>
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/signup" element={signupEnabled ? <SignupPage /> : <Navigate to="/login" replace />} />
           
           {/* Admin Routes */}
           <Route
@@ -93,8 +98,14 @@ function App() {
           {/* Kiosk route (no auth, usually loaded on dedicated devices) */}
           <Route path="/kiosk/checkpoints/:id" element={<KioskCheckpointQrPage />} />
 
+          {/* Access denied */}
+          <Route path="/forbidden" element={<AccessDeniedPage />} />
+
           {/* Default redirect */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/" element={<HomeRedirect />} />
+
+          {/* 404 */}
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

@@ -130,7 +130,7 @@ export default function GuardScanPage() {
       try {
         await scannerRef.current.stop();
         await scannerRef.current.clear();
-      } catch (err) {
+      } catch {
         // Ignore errors
       }
       scannerRef.current = null;
@@ -157,6 +157,18 @@ export default function GuardScanPage() {
       try {
         const canScan = await guardService.canScanCheckpoint(qrData.checkpointId);
         if (!canScan.canScan) {
+          if (canScan.code === 'CHECKPOINT_NOT_DUE') {
+            const due = canScan.dueTime ? new Date(canScan.dueTime).toLocaleTimeString() : null;
+            const name = canScan.nextCheckpointName;
+            setError(due && name ? `Not due yet. Wait until ${due} to scan "${name}".` : (canScan.error || 'Not due yet.'));
+            return;
+          }
+          if (canScan.code === 'SEQUENCE_ENFORCED') {
+            const name = canScan.nextCheckpointName;
+            const due = canScan.dueTime ? new Date(canScan.dueTime).toLocaleTimeString() : null;
+            setError(name && due ? `Next expected checkpoint: "${name}" (due at ${due}).` : (canScan.error || 'Please scan checkpoints in order.'));
+            return;
+          }
           setError(canScan.error || 'You are not authorized to scan this checkpoint');
           return;
         }
@@ -200,6 +212,18 @@ export default function GuardScanPage() {
         errorMessage = `Access denied: ${errorMessage}`;
       } else if (errorData?.code === 'GUARD_ROLE_REQUIRED') {
         errorMessage = `Access denied: ${errorMessage}`;
+      } else if (errorData?.code === 'CHECKPOINT_NOT_DUE') {
+        const due = errorData?.dueTime ? new Date(errorData.dueTime).toLocaleTimeString() : null;
+        const name = errorData?.nextCheckpointName;
+        errorMessage = due && name ? `Not due yet. Wait until ${due} to scan "${name}".` : errorMessage;
+      } else if (errorData?.code === 'SEQUENCE_ENFORCED') {
+        const name = errorData?.nextCheckpointName;
+        const due = errorData?.dueTime ? new Date(errorData.dueTime).toLocaleTimeString() : null;
+        if (name && due) {
+          errorMessage = `Next expected checkpoint: "${name}" (due at ${due}).`;
+        } else if (name) {
+          errorMessage = `Next expected checkpoint: "${name}".`;
+        }
       }
       
       setError(errorMessage);

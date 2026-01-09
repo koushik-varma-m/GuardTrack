@@ -194,6 +194,8 @@ export async function canScanCheckpoint(req: Request, res: Response) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
+    const toMs = (minutes: number) => minutes * 60_000;
+
     const { checkpointId } = req.query;
 
     if (!checkpointId || typeof checkpointId !== 'string') {
@@ -298,6 +300,131 @@ export async function canScanCheckpoint(req: Request, res: Response) {
       });
     }
 
+    // Enforce scan timing + sequence (same rules as actual check-in)
+    const premiseCheckpoints = await prisma.checkpoint.findMany({
+      where: { premiseId: checkpoint.premiseId },
+      select: { id: true, sequence: true, name: true, intervalMinutes: true },
+      orderBy: [
+        { sequence: 'asc' },
+        { name: 'asc' },
+      ],
+    });
+
+    if (premiseCheckpoints.length === 0) {
+      return res.json({
+        canScan: false,
+        error: 'No checkpoints configured for this premise',
+        code: 'NO_CHECKPOINTS',
+      });
+    }
+
+    if (premiseCheckpoints.some((c) => !c.sequence)) {
+      return res.json({
+        canScan: false,
+        error: 'Checkpoint sequence not configured. Please contact an administrator.',
+        code: 'SEQUENCE_NOT_CONFIGURED',
+      });
+    }
+
+    const orderedCheckpoints = premiseCheckpoints
+      .filter((c) => c.sequence)
+      .sort((a, b) => {
+        const seq = (a.sequence ?? 0) - (b.sequence ?? 0);
+        if (seq !== 0) return seq;
+        return a.name.localeCompare(b.name);
+      });
+
+    const lastCheckIn = await prisma.checkIn.findFirst({
+      where: {
+        guardId,
+        assignmentId: assignment.id,
+        scannedAt: {
+          gte: assignment.startTime,
+        },
+      },
+      orderBy: {
+        scannedAt: 'desc',
+      },
+      select: {
+        checkpointId: true,
+        scannedAt: true,
+      },
+    });
+
+    const expectedFromCheckIn = (() => {
+      if (!lastCheckIn) return orderedCheckpoints[0];
+      const currentIndex = orderedCheckpoints.findIndex((c) => c.id === lastCheckIn.checkpointId);
+      if (currentIndex === -1) return orderedCheckpoints[0];
+      const nextIndex = (currentIndex + 1) % orderedCheckpoints.length;
+      return orderedCheckpoints[nextIndex];
+    })();
+
+    const resolvedExpected = await prisma.alert.findFirst({
+      where: {
+        guardId,
+        assignmentId: assignment.id,
+        checkpointId: expectedFromCheckIn.id,
+        status: 'RESOLVED',
+        resolvedAt: { not: null, gte: lastCheckIn?.scannedAt ?? assignment.startTime },
+      },
+      orderBy: {
+        resolvedAt: 'desc',
+      },
+      select: {
+        resolvedAt: true,
+      },
+    });
+
+    const lastProgress = resolvedExpected?.resolvedAt
+      ? { checkpointId: expectedFromCheckIn.id, at: resolvedExpected.resolvedAt }
+      : lastCheckIn
+        ? { checkpointId: lastCheckIn.checkpointId, at: lastCheckIn.scannedAt }
+        : null;
+
+    const expectedCheckpoint = (() => {
+      if (!lastProgress) {
+        return orderedCheckpoints[0];
+      }
+      const currentIndex = orderedCheckpoints.findIndex((c) => c.id === lastProgress.checkpointId);
+      if (currentIndex === -1) return orderedCheckpoints[0];
+      const nextIndex = (currentIndex + 1) % orderedCheckpoints.length;
+      return orderedCheckpoints[nextIndex];
+    })();
+
+    const expectedDueTime = (() => {
+      if (!expectedCheckpoint) return null;
+      const intervalMinutes = expectedCheckpoint.intervalMinutes ?? assignment.intervalMinutes;
+      if (intervalMinutes === null || intervalMinutes === undefined) {
+        throw new Error('Checkpoint interval not configured');
+      }
+      if (!lastProgress) {
+        return assignment.startTime;
+      }
+      return new Date(lastProgress.at.getTime() + toMs(intervalMinutes));
+    })();
+
+    if (expectedCheckpoint && expectedDueTime && now.getTime() < expectedDueTime.getTime()) {
+      return res.json({
+        canScan: false,
+        error: `Not due yet. Please wait until ${expectedDueTime.toLocaleTimeString()} to scan "${expectedCheckpoint.name}".`,
+        code: 'CHECKPOINT_NOT_DUE',
+        nextCheckpointId: expectedCheckpoint.id,
+        nextCheckpointName: expectedCheckpoint.name,
+        dueTime: expectedDueTime,
+      });
+    }
+
+    if (expectedCheckpoint && expectedCheckpoint.id !== checkpointId) {
+      return res.json({
+        canScan: false,
+        error: `Please scan checkpoints in order. Next expected checkpoint: "${expectedCheckpoint.name}".`,
+        code: 'SEQUENCE_ENFORCED',
+        nextCheckpointId: expectedCheckpoint.id,
+        nextCheckpointName: expectedCheckpoint.name,
+        ...(expectedDueTime ? { dueTime: expectedDueTime } : {}),
+      });
+    }
+
     // All checks passed - guard can scan
     res.json({
       canScan: true,
@@ -308,6 +435,13 @@ export async function canScanCheckpoint(req: Request, res: Response) {
     });
   } catch (error) {
     console.error('Can scan checkpoint error:', error);
+    if (error instanceof Error && error.message === 'Checkpoint interval not configured') {
+      return res.status(400).json({
+        canScan: false,
+        error: 'Checkpoint intervals not configured. Please ask an administrator to set intervals for all checkpoints.',
+        code: 'INTERVAL_NOT_CONFIGURED',
+      });
+    }
     res.status(500).json({
       canScan: false,
       error: 'Failed to verify scan eligibility',
@@ -448,8 +582,12 @@ export async function getNextCheckpoint(req: Request, res: Response) {
         name: true,
         description: true,
         sequence: true,
+        intervalMinutes: true,
       },
-      orderBy: { sequence: 'asc' },
+      orderBy: [
+        { sequence: 'asc' },
+        { name: 'asc' },
+      ],
     });
 
     if (checkpoints.length === 0) {
@@ -470,7 +608,8 @@ export async function getNextCheckpoint(req: Request, res: Response) {
       });
     }
 
-    // Check-ins for this assignment/guard
+    const toMs = (minutes: number) => minutes * 60_000;
+
     const lastCheckIn = await prisma.checkIn.findFirst({
       where: {
         guardId,
@@ -480,10 +619,34 @@ export async function getNextCheckpoint(req: Request, res: Response) {
         },
       },
       orderBy: { scannedAt: 'desc' },
-      include: {
-        checkpoint: { select: { id: true, sequence: true } },
-      },
+      select: { checkpointId: true, scannedAt: true },
     });
+
+    const expectedFromCheckIn = (() => {
+      if (!lastCheckIn) return checkpoints[0];
+      const currentIndex = checkpoints.findIndex((c) => c.id === lastCheckIn.checkpointId);
+      if (currentIndex === -1) return checkpoints[0];
+      const nextIndex = (currentIndex + 1) % checkpoints.length;
+      return checkpoints[nextIndex];
+    })();
+
+    const resolvedExpected = await prisma.alert.findFirst({
+      where: {
+        guardId,
+        assignmentId: assignment.id,
+        checkpointId: expectedFromCheckIn.id,
+        status: 'RESOLVED',
+        resolvedAt: { not: null, gte: lastCheckIn?.scannedAt ?? assignment.startTime },
+      },
+      orderBy: { resolvedAt: 'desc' },
+      select: { resolvedAt: true },
+    });
+
+    const lastProgress = resolvedExpected?.resolvedAt
+      ? { checkpointId: expectedFromCheckIn.id, at: resolvedExpected.resolvedAt }
+      : lastCheckIn
+        ? { checkpointId: lastCheckIn.checkpointId, at: lastCheckIn.scannedAt }
+        : null;
 
     const checkInCount = await prisma.checkIn.count({
       where: {
@@ -502,8 +665,8 @@ export async function getNextCheckpoint(req: Request, res: Response) {
     let nextCheckpoint = checkpoints[0] || null;
     let remaining = checkpoints.length;
 
-    if (lastCheckIn?.checkpoint?.sequence) {
-      const idx = checkpoints.findIndex((c) => c.id === lastCheckIn.checkpoint.id);
+    if (lastProgress) {
+      const idx = checkpoints.findIndex((c) => c.id === lastProgress.checkpointId);
       if (idx !== -1) {
         const nextIdx = (idx + 1) % checkpoints.length;
         nextCheckpoint = checkpoints[nextIdx];
@@ -514,6 +677,14 @@ export async function getNextCheckpoint(req: Request, res: Response) {
       }
     }
 
+    const dueTime = (() => {
+      if (!nextCheckpoint) return null;
+      const intervalMinutes = nextCheckpoint.intervalMinutes ?? assignment.intervalMinutes;
+      if (intervalMinutes === null || intervalMinutes === undefined) return null;
+      if (!lastProgress) return assignment.startTime;
+      return new Date(lastProgress.at.getTime() + toMs(intervalMinutes));
+    })();
+
     res.json({
       nextCheckpoint,
       remaining,
@@ -523,6 +694,7 @@ export async function getNextCheckpoint(req: Request, res: Response) {
       assignmentId: assignment.id,
       premiseId: assignment.premiseId,
       premiseName: assignment.premise.name,
+      dueTime,
     });
   } catch (error) {
     console.error('Get next checkpoint error:', error);

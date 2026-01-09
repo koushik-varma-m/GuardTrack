@@ -7,6 +7,7 @@ import {
   Button,
   Tabs,
   Tab,
+  ButtonBase,
 } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 
@@ -49,11 +50,24 @@ export default function AdminLayout() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static" elevation={2}>
+      <AppBar position="static" elevation={2} sx={{ bgcolor: 'primary.dark' }}>
         <Toolbar sx={{ minHeight: { xs: 56, sm: 64 } }}>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 600 }}>
-            Guard Track
-          </Typography>
+          <ButtonBase
+            onClick={() => navigate('/')}
+            sx={{
+              flexGrow: 1,
+              justifyContent: 'flex-start',
+              borderRadius: 1,
+              py: 0.5,
+              px: 0.75,
+              ml: -0.75,
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.08)' },
+            }}
+          >
+            <Typography variant="h6" component="div" sx={{ fontWeight: 700 }}>
+              Guard Track
+            </Typography>
+          </ButtonBase>
           <Box display="flex" alignItems="center" gap={2}>
             <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
               {user?.name}

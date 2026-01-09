@@ -34,6 +34,8 @@ const QUICK_LOGINS = {
 
 export default function LoginPage() {
   const ldapEnabled = import.meta.env.VITE_ENABLE_LDAP_LOGIN === 'true';
+  const quickLoginEnabled = import.meta.env.VITE_ENABLE_QUICK_LOGIN === 'true';
+  const signupEnabled = import.meta.env.VITE_ENABLE_SIGNUP === 'true';
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -104,117 +106,115 @@ export default function LoginPage() {
   };
 
   return (
-    <Container maxWidth="md">
-      <Box sx={{ mt: 4, mb: 4 }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        py: 6,
+        background: `linear-gradient(135deg, rgba(25, 118, 210, 0.10), rgba(156, 39, 176, 0.06))`,
+      }}
+    >
+      <Container maxWidth="md">
+      <Box sx={{ width: '100%' }}>
         <Typography component="h1" variant="h4" align="center" gutterBottom>
           Guard Track Login
         </Typography>
         <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 3 }}>
-          Choose a role to quick login or enter credentials manually
+          {quickLoginEnabled
+            ? 'Choose a role to quick login or enter credentials manually'
+            : 'Sign in to continue'}
         </Typography>
 
-        {/* Quick Login Cards */}
-        <Grid container spacing={2} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={4}>
-            <Card
-              sx={{
-                height: '100%',
-                border: email === QUICK_LOGINS.ADMIN.email ? 2 : 1,
-                borderColor: email === QUICK_LOGINS.ADMIN.email ? 'primary.main' : 'divider',
-              }}
-            >
-              <CardActionArea
-                onClick={() => handleQuickLogin('ADMIN')}
-                disabled={loading}
-                sx={{ p: 2, height: '100%' }}
+        {/* Quick Login Cards (demo only) */}
+        {quickLoginEnabled && (
+          <Grid container spacing={2} sx={{ mb: 4 }}>
+            <Grid item xs={12} sm={4}>
+              <Card
+                sx={{
+                  height: '100%',
+                  border: email === QUICK_LOGINS.ADMIN.email ? 2 : 1,
+                  borderColor: email === QUICK_LOGINS.ADMIN.email ? 'primary.main' : 'divider',
+                }}
               >
-                <CardContent>
-                  <Box display="flex" flexDirection="column" alignItems="center">
-                    <AdminIcon color="primary" sx={{ fontSize: 48, mb: 1 }} />
-                    <Typography variant="h6" gutterBottom>
-                      Admin
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" align="center">
-                      Manage premises, checkpoints, and users
-                    </Typography>
-                    <Chip
-                      label="Quick Login"
-                      size="small"
-                      color="primary"
-                      sx={{ mt: 1 }}
-                    />
-                  </Box>
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <Card
-              sx={{
-                height: '100%',
-                border: email === QUICK_LOGINS.ANALYST.email ? 2 : 1,
-                borderColor: email === QUICK_LOGINS.ANALYST.email ? 'primary.main' : 'divider',
-              }}
-            >
-              <CardActionArea
-                onClick={() => handleQuickLogin('ANALYST')}
-                disabled={loading}
-                sx={{ p: 2, height: '100%' }}
+                <CardActionArea
+                  onClick={() => handleQuickLogin('ADMIN')}
+                  disabled={loading}
+                  sx={{ p: 2, height: '100%' }}
+                >
+                  <CardContent>
+                    <Box display="flex" flexDirection="column" alignItems="center">
+                      <AdminIcon color="primary" sx={{ fontSize: 48, mb: 1 }} />
+                      <Typography variant="h6" gutterBottom>
+                        Admin
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" align="center">
+                        Manage premises, checkpoints, and users
+                      </Typography>
+                      <Chip label="Quick Login" size="small" color="primary" sx={{ mt: 1 }} />
+                    </Box>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Card
+                sx={{
+                  height: '100%',
+                  border: email === QUICK_LOGINS.ANALYST.email ? 2 : 1,
+                  borderColor: email === QUICK_LOGINS.ANALYST.email ? 'primary.main' : 'divider',
+                }}
               >
-                <CardContent>
-                  <Box display="flex" flexDirection="column" alignItems="center">
-                    <AnalystIcon color="primary" sx={{ fontSize: 48, mb: 1 }} />
-                    <Typography variant="h6" gutterBottom>
-                      Analyst
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" align="center">
-                      Monitor premises status and alerts
-                    </Typography>
-                    <Chip
-                      label="Quick Login"
-                      size="small"
-                      color="primary"
-                      sx={{ mt: 1 }}
-                    />
-                  </Box>
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <Card
-              sx={{
-                height: '100%',
-                border: email === QUICK_LOGINS.GUARD.email ? 2 : 1,
-                borderColor: email === QUICK_LOGINS.GUARD.email ? 'primary.main' : 'divider',
-              }}
-            >
-              <CardActionArea
-                onClick={() => handleQuickLogin('GUARD')}
-                disabled={loading}
-                sx={{ p: 2, height: '100%' }}
+                <CardActionArea
+                  onClick={() => handleQuickLogin('ANALYST')}
+                  disabled={loading}
+                  sx={{ p: 2, height: '100%' }}
+                >
+                  <CardContent>
+                    <Box display="flex" flexDirection="column" alignItems="center">
+                      <AnalystIcon color="primary" sx={{ fontSize: 48, mb: 1 }} />
+                      <Typography variant="h6" gutterBottom>
+                        Analyst
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" align="center">
+                        Monitor premises status and alerts
+                      </Typography>
+                      <Chip label="Quick Login" size="small" color="primary" sx={{ mt: 1 }} />
+                    </Box>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Card
+                sx={{
+                  height: '100%',
+                  border: email === QUICK_LOGINS.GUARD.email ? 2 : 1,
+                  borderColor: email === QUICK_LOGINS.GUARD.email ? 'primary.main' : 'divider',
+                }}
               >
-                <CardContent>
-                  <Box display="flex" flexDirection="column" alignItems="center">
-                    <GuardIcon color="primary" sx={{ fontSize: 48, mb: 1 }} />
-                    <Typography variant="h6" gutterBottom>
-                      Guard
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" align="center">
-                      Scan QR codes and check in at checkpoints
-                    </Typography>
-                    <Chip
-                      label="Quick Login"
-                      size="small"
-                      color="primary"
-                      sx={{ mt: 1 }}
-                    />
-                  </Box>
-                </CardContent>
-              </CardActionArea>
-            </Card>
+                <CardActionArea
+                  onClick={() => handleQuickLogin('GUARD')}
+                  disabled={loading}
+                  sx={{ p: 2, height: '100%' }}
+                >
+                  <CardContent>
+                    <Box display="flex" flexDirection="column" alignItems="center">
+                      <GuardIcon color="primary" sx={{ fontSize: 48, mb: 1 }} />
+                      <Typography variant="h6" gutterBottom>
+                        Guard
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" align="center">
+                        Scan QR codes and check in at checkpoints
+                      </Typography>
+                      <Chip label="Quick Login" size="small" color="primary" sx={{ mt: 1 }} />
+                    </Box>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            </Grid>
           </Grid>
-        </Grid>
+        )}
 
         <Divider sx={{ my: 3 }}>
           <Typography variant="body2" color="text.secondary">
@@ -290,17 +290,20 @@ export default function LoginPage() {
             >
               {loading ? 'Logging in...' : 'Login'}
             </Button>
-            <Box textAlign="center" sx={{ mt: 2 }}>
-              <Typography variant="body2">
-                Don't have an account?{' '}
-                <Link to="/signup" style={{ textDecoration: 'none' }}>
-                  Sign up here
-                </Link>
-              </Typography>
-            </Box>
+            {signupEnabled && (
+              <Box textAlign="center" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  Don't have an account?{' '}
+                  <Link to="/signup" style={{ textDecoration: 'none' }}>
+                    Sign up here
+                  </Link>
+                </Typography>
+              </Box>
+            )}
           </form>
         </Paper>
       </Box>
     </Container>
+    </Box>
   );
 }
