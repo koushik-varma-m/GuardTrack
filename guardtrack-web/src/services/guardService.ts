@@ -26,6 +26,7 @@ export interface NextCheckpointResponse {
   assignmentId: string;
   premiseId: string;
   premiseName: string;
+  dueTime?: string | null;
 }
 
 export interface ActiveAssignment {
@@ -41,6 +42,15 @@ export interface ActiveAssignment {
   createdAt: string;
   updatedAt: string;
 }
+
+export type ActiveAssignmentResponse =
+  | {
+      hasActiveAssignment: false;
+      message?: string;
+    }
+  | ({
+      hasActiveAssignment: true;
+    } & ActiveAssignment);
 
 export interface CheckIn {
   id: string;
@@ -86,8 +96,8 @@ export const guardService = {
     return response.data;
   },
 
-  async getMyActiveAssignment(): Promise<ActiveAssignment> {
-    const response = await api.get<ActiveAssignment>('/me/assignments/active');
+  async getMyActiveAssignment(): Promise<ActiveAssignmentResponse> {
+    const response = await api.get<ActiveAssignmentResponse>('/me/assignments/active');
     return response.data;
   },
 

@@ -22,6 +22,7 @@ export default function GuardCheckpointsPage() {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -31,10 +32,18 @@ export default function GuardCheckpointsPage() {
   const loadCheckpoints = async () => {
     try {
       setLoading(true);
+      setError('');
+      setInfo('');
       const data = await guardService.getMyCheckpoints();
       setCheckpoints(data);
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || 'Failed to load checkpoints');
+      const code = err.response?.data?.code;
+      if (code === 'NO_ACTIVE_ASSIGNMENT') {
+        setInfo(err.response?.data?.error || 'No active assignment found. Please contact your supervisor.');
+        setCheckpoints([]);
+      } else {
+        setError(err.response?.data?.error || err.message || 'Failed to load checkpoints');
+      }
     } finally {
       setLoading(false);
     }
@@ -60,6 +69,12 @@ export default function GuardCheckpointsPage() {
           Scan QR
         </Button>
       </Box>
+
+      {info && (
+        <Alert severity="info" sx={{ mb: 2 }} onClose={() => setInfo('')}>
+          {info}
+        </Alert>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>

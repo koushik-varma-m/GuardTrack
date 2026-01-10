@@ -27,6 +27,7 @@ export default function GuardScanPage() {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<CheckInResponse | null>(null);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [manualDialog, setManualDialog] = useState(false);
   const [manualCheckpointId, setManualCheckpointId] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -62,6 +63,7 @@ export default function GuardScanPage() {
 
   const loadNextCheckpoint = async () => {
     try {
+      setInfo('');
       setLoadingNext(true);
       const data = await guardService.getNextCheckpoint();
       if (prevLapNumber === null) {
@@ -78,7 +80,12 @@ export default function GuardScanPage() {
         setSelectedCheckpointId(data.nextCheckpoint.id);
       }
     } catch (err: any) {
-      // swallow; already enforced by backend on scan
+      const code = err.response?.data?.code;
+      if (code === 'NO_ACTIVE_ASSIGNMENT') {
+        setInfo(err.response?.data?.error || 'No active assignment found. Please contact your supervisor.');
+        setNextCheckpoint(null);
+        return;
+      }
       console.warn('Failed to load next checkpoint', err);
     } finally {
       setLoadingNext(false);
@@ -87,12 +94,19 @@ export default function GuardScanPage() {
 
   const loadCheckpoints = async () => {
     try {
+      setInfo('');
       const checkpoints = await guardService.getMyCheckpoints();
       setMyCheckpoints(checkpoints);
       if (!selectedCheckpointId && checkpoints.length > 0) {
         setSelectedCheckpointId(checkpoints[0].id);
       }
     } catch (err: any) {
+      const code = err.response?.data?.code;
+      if (code === 'NO_ACTIVE_ASSIGNMENT') {
+        setInfo(err.response?.data?.error || 'No active assignment found. Please contact your supervisor.');
+        setMyCheckpoints([]);
+        return;
+      }
       console.warn('Failed to load checkpoints', err);
     }
   };
@@ -290,6 +304,12 @@ export default function GuardScanPage() {
         Scan Checkpoint
       </Typography>
 
+      {info && (
+        <Alert severity="info" sx={{ mb: 2 }} onClose={() => setInfo('')}>
+          {info}
+        </Alert>
+      )}
+
       {nextCheckpoint && (
         <Alert
           severity={nextCheckpoint.nextCheckpoint ? 'info' : 'success'}
@@ -349,7 +369,7 @@ export default function GuardScanPage() {
               variant="contained"
               size="large"
               onClick={startScanning}
-              disabled={submitting}
+              disabled={submitting || !!info}
             >
               Start Scanning
             </Button>

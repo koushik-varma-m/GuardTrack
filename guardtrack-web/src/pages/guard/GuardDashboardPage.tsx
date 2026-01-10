@@ -23,6 +23,7 @@ export default function GuardDashboardPage() {
   const [assignment, setAssignment] = useState<ActiveAssignment | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [nextCheckpoint, setNextCheckpoint] = useState<NextCheckpointResponse | null>(null);
   const navigate = useNavigate();
 
@@ -33,13 +34,30 @@ export default function GuardDashboardPage() {
   const loadAssignment = async () => {
     try {
       setLoading(true);
-      const [data, next] = await Promise.all([
-        guardService.getMyActiveAssignment(),
-        guardService.getNextCheckpoint().catch(() => null),
-      ]);
-      setAssignment(data);
+      setError('');
+      setInfo('');
+
+      const assignmentResponse = await guardService.getMyActiveAssignment();
+      if (!assignmentResponse.hasActiveAssignment) {
+        setAssignment(null);
+        setNextCheckpoint(null);
+        setInfo(assignmentResponse.message || 'No active assignment found. Please contact your supervisor.');
+        return;
+      }
+
+      setAssignment(assignmentResponse);
+      const next = await guardService.getNextCheckpoint().catch((err: any) => {
+        const code = err?.response?.data?.code;
+        if (code === 'NO_ACTIVE_ASSIGNMENT') {
+          setInfo(err?.response?.data?.error || 'No active assignment found. Please contact your supervisor.');
+          return null;
+        }
+        return null;
+      });
       setNextCheckpoint(next);
     } catch (err: any) {
+      setAssignment(null);
+      setNextCheckpoint(null);
       setError(err.response?.data?.error || err.message || 'Failed to load assignment');
     } finally {
       setLoading(false);
@@ -67,9 +85,7 @@ export default function GuardDashboardPage() {
   if (!assignment) {
     return (
       <Box>
-        <Alert severity="info">
-          No active assignment found. Please contact your supervisor.
-        </Alert>
+        <Alert severity="info">{info || 'No active assignment found. Please contact your supervisor.'}</Alert>
       </Box>
     );
   }
@@ -79,6 +95,12 @@ export default function GuardDashboardPage() {
       <Typography variant="h4" gutterBottom>
         Guard Dashboard
       </Typography>
+
+      {info && (
+        <Alert severity="info" sx={{ mb: 2 }} onClose={() => setInfo('')}>
+          {info}
+        </Alert>
+      )}
 
       <Grid container spacing={3} sx={{ mt: 2 }}>
         <Grid item xs={12} md={8}>
