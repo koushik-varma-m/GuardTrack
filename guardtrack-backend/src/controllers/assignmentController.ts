@@ -76,6 +76,8 @@ export async function createAssignment(req: Request, res: Response) {
 export async function getAssignments(req: Request, res: Response) {
   try {
     const { guardId, premiseId, date } = req.query;
+    const userRole = req.user?.role;
+    const userId = req.user?.id;
 
     const where: any = {};
 
@@ -85,6 +87,31 @@ export async function getAssignments(req: Request, res: Response) {
 
     if (premiseId) {
       where.premiseId = premiseId as string;
+    }
+
+    // Analysts can only view assignments for premises they're assigned to
+    if (userRole === 'ANALYST') {
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const analystAssignments = await prisma.analystAssignment.findMany({
+        where: { analystId: userId },
+        select: { premiseId: true },
+      });
+      const assignedPremiseIds = analystAssignments.map((a) => a.premiseId);
+
+      if (assignedPremiseIds.length === 0) {
+        return res.json([]);
+      }
+
+      if (where.premiseId) {
+        if (!assignedPremiseIds.includes(where.premiseId)) {
+          return res.json([]);
+        }
+      } else {
+        where.premiseId = { in: assignedPremiseIds };
+      }
     }
 
     if (date) {
@@ -127,6 +154,71 @@ export async function getAssignments(req: Request, res: Response) {
   } catch (error) {
     console.error('Get assignments error:', error);
     res.status(500).json({ error: 'Failed to fetch assignments' });
+  }
+}
+
+export async function getUpcomingAssignments(req: Request, res: Response) {
+  try {
+    const userRole = req.user?.role;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const parsePositiveInt = (value: unknown, fallback: number) => {
+      const n = typeof value === 'string' ? Number.parseInt(value, 10) : NaN;
+      if (!Number.isFinite(n) || n <= 0) return fallback;
+      return n;
+    };
+
+    const days = Math.min(parsePositiveInt(req.query.days, 7), 90);
+    const limit = Math.min(parsePositiveInt(req.query.limit, 10), 50);
+
+    const now = new Date();
+    const until = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const where: any = {
+      startTime: { gt: now, lte: until },
+    };
+
+    if (userRole === 'GUARD') {
+      where.guardId = userId;
+    } else if (userRole === 'ANALYST') {
+      const analystAssignments = await prisma.analystAssignment.findMany({
+        where: { analystId: userId },
+        select: { premiseId: true },
+      });
+      const assignedPremiseIds = analystAssignments.map((a) => a.premiseId);
+      if (assignedPremiseIds.length === 0) {
+        return res.json([]);
+      }
+      where.premiseId = { in: assignedPremiseIds };
+    } else if (userRole === 'ADMIN') {
+      if (typeof req.query.guardId === 'string' && req.query.guardId) {
+        where.guardId = req.query.guardId;
+      }
+      if (typeof req.query.premiseId === 'string' && req.query.premiseId) {
+        where.premiseId = req.query.premiseId;
+      }
+    } else {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const assignments = await prisma.guardAssignment.findMany({
+      where,
+      include: {
+        guard: { select: { id: true, name: true, email: true } },
+        premise: { select: { id: true, name: true, address: true } },
+      },
+      orderBy: { startTime: 'asc' },
+      take: limit,
+    });
+
+    res.json(assignments);
+  } catch (error) {
+    console.error('Get upcoming assignments error:', error);
+    res.status(500).json({ error: 'Failed to fetch upcoming assignments' });
   }
 }
 

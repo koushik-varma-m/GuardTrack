@@ -31,6 +31,16 @@ export const assignmentService = {
     return response.data;
   },
 
+  async getUpcoming(params?: { days?: number; limit?: number }): Promise<Assignment[]> {
+    const queryParams = new URLSearchParams();
+    if (params?.days) queryParams.append('days', String(params.days));
+    if (params?.limit) queryParams.append('limit', String(params.limit));
+
+    const suffix = queryParams.toString() ? `?${queryParams.toString()}` : '';
+    const response = await api.get<Assignment[]>(`/assignments/upcoming${suffix}`);
+    return response.data;
+  },
+
   async create(data: {
     guardId: string;
     premiseId: string;

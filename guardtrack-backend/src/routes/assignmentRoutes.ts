@@ -3,6 +3,7 @@ import {
   createAssignment,
   getAssignments,
   getActiveAssignmentsForGuard,
+  getUpcomingAssignments,
   updateAssignment,
   deleteAssignment,
 } from '../controllers/assignmentController';
@@ -19,6 +20,9 @@ router.post('/', requireRole(UserRole.ADMIN), createAssignment);
 
 // GET /api/v1/assignments/me/active - Get active assignments for current guard (GUARD only)
 router.get('/me/active', requireRole(UserRole.GUARD), getActiveAssignmentsForGuard);
+
+// GET /api/v1/assignments/upcoming - Upcoming schedules (GUARD/ANALYST/ADMIN)
+router.get('/upcoming', requireRole(UserRole.GUARD, UserRole.ANALYST, UserRole.ADMIN), getUpcomingAssignments);
 
 // GET /api/v1/assignments - Get assignments with filters (ADMIN and ANALYST)
 router.get('/', requireRole(UserRole.ADMIN, UserRole.ANALYST), getAssignments);

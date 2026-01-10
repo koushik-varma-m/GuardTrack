@@ -21,13 +21,16 @@ import {
 import { Refresh as RefreshIcon, LocationOn as LocationOnIcon } from '@mui/icons-material';
 import { premiseService } from '../../services/premiseService';
 import { alertService } from '../../services/alertService';
+import { assignmentService } from '../../services/assignmentService';
 import type { Alert as AlertType } from '../../services/alertService';
 import type { Premise } from '../../services/premiseService';
+import type { Assignment } from '../../services/assignmentService';
 
 export default function AnalystDashboardPage() {
   const navigate = useNavigate();
   const [assignedPremises, setAssignedPremises] = useState<Premise[]>([]);
   const [openAlerts, setOpenAlerts] = useState<AlertType[]>([]);
+  const [upcomingAssignments, setUpcomingAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [resolving, setResolving] = useState<string | null>(null);
@@ -39,13 +42,16 @@ export default function AnalystDashboardPage() {
   const loadData = async () => {
     try {
       setLoading(true);
+      setError('');
       // Get only assigned premises (backend filters automatically for analysts)
-      const [premises, alerts] = await Promise.all([
+      const [premises, alerts, upcoming] = await Promise.all([
         premiseService.getAll(),
         alertService.getAlerts({ status: 'OPEN' }),
+        assignmentService.getUpcoming({ days: 14, limit: 20 }).catch(() => []),
       ]);
       setAssignedPremises(premises);
       setOpenAlerts(alerts);
+      setUpcomingAssignments(upcoming);
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Failed to load data');
     } finally {
@@ -114,6 +120,44 @@ export default function AnalystDashboardPage() {
           </Card>
         </Grid>
       </Grid>
+
+      <Paper sx={{ mb: 3 }}>
+        <Box p={2}>
+          <Typography variant="h6" gutterBottom>
+            Upcoming Guard Shifts (next 14 days)
+          </Typography>
+        </Box>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Premise</TableCell>
+                <TableCell>Guard</TableCell>
+                <TableCell>Start</TableCell>
+                <TableCell>End</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {upcomingAssignments.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} align="center">
+                    No upcoming shifts scheduled for your premises
+                  </TableCell>
+                </TableRow>
+              ) : (
+                upcomingAssignments.map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell>{a.premise?.name || '-'}</TableCell>
+                    <TableCell>{a.guard?.name || '-'}</TableCell>
+                    <TableCell>{new Date(a.startTime).toLocaleString()}</TableCell>
+                    <TableCell>{new Date(a.endTime).toLocaleString()}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
 
       {/* Assigned Premises List */}
       {assignedPremises.length > 0 && (
