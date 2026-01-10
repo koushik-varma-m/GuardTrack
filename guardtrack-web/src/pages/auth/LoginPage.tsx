@@ -27,9 +27,9 @@ import { authService } from '../../services/authService';
 
 // Quick login credentials for testing
 const QUICK_LOGINS = {
-  ADMIN: { email: 'admin@test.com', password: 'password123', label: 'Admin' },
-  ANALYST: { email: 'analyst@example.com', password: 'Password123', label: 'Analyst' },
-  GUARD: { email: 'guard@example.com', password: 'Password123', label: 'Guard' },
+  ADMIN: { email: 'admin.demo@example.com', password: 'Admin@123!', label: 'Admin' },
+  ANALYST: { email: 'analyst.beta@example.com', password: 'Analyst@123!', label: 'Analyst' },
+  GUARD: { email: 'guard.two@example.com', password: 'Guard@123!', label: 'Guard' },
 };
 
 export default function LoginPage() {
@@ -101,6 +101,7 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Login failed');
+    } finally {
       setLoading(false);
     }
   };
