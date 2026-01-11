@@ -11,6 +11,11 @@ export default function GuardLayout() {
     navigate('/login');
   };
 
+  const switchToV2 = () => {
+    localStorage.setItem('uiVersion', 'v2');
+    navigate('/v2');
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AppBar position="static" elevation={2} sx={{ bgcolor: 'success.dark' }}>
@@ -34,6 +39,9 @@ export default function GuardLayout() {
           <Typography variant="body2" sx={{ mr: 2, opacity: 0.9, display: { xs: 'none', sm: 'block' } }}>
             {user?.name}
           </Typography>
+          <Button color="inherit" onClick={switchToV2} sx={{ textTransform: 'none', fontWeight: 600, mr: 1, opacity: 0.9 }}>
+            UI v2
+          </Button>
           <Button color="inherit" onClick={handleLogout} sx={{ textTransform: 'none', fontWeight: 600 }}>
             Logout
           </Button>

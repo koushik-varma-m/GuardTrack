@@ -36,6 +36,13 @@ import HomeRedirect from './pages/HomeRedirect';
 import AccessDeniedPage from './pages/errors/AccessDeniedPage';
 import NotFoundPage from './pages/errors/NotFoundPage';
 
+// V2 UI
+import V2AppShell from './v2/components/V2AppShell';
+import V2LandingRedirect from './v2/pages/V2LandingRedirect';
+import V2GuardDashboardPage from './v2/pages/V2GuardDashboardPage';
+import V2AnalystDashboardPage from './v2/pages/V2AnalystDashboardPage';
+import V2AdminOverviewPage from './v2/pages/V2AdminOverviewPage';
+
 function App() {
   const signupEnabled = import.meta.env.VITE_ENABLE_SIGNUP === 'true';
 
@@ -100,6 +107,141 @@ function App() {
 
           {/* Access denied */}
           <Route path="/forbidden" element={<AccessDeniedPage />} />
+
+          {/* V2 UI (optional) */}
+          <Route
+            path="/v2"
+            element={
+              <ProtectedRoute>
+                <V2AppShell />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<V2LandingRedirect />} />
+
+            <Route
+              path="guard"
+              element={
+                <ProtectedRoute roles={['GUARD']}>
+                  <V2GuardDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="guard/scan"
+              element={
+                <ProtectedRoute roles={['GUARD']}>
+                  <GuardScanPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="guard/checkpoints"
+              element={
+                <ProtectedRoute roles={['GUARD']}>
+                  <GuardCheckpointsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="guard/history"
+              element={
+                <ProtectedRoute roles={['GUARD']}>
+                  <GuardHistoryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="guard/nfc-checkin"
+              element={
+                <ProtectedRoute roles={['GUARD']}>
+                  <GuardNfcCheckInPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="analyst"
+              element={
+                <ProtectedRoute roles={['ANALYST', 'ADMIN']}>
+                  <V2AnalystDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="analyst/dashboard"
+              element={
+                <ProtectedRoute roles={['ANALYST', 'ADMIN']}>
+                  <V2AnalystDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="analyst/premises/:id"
+              element={
+                <ProtectedRoute roles={['ANALYST', 'ADMIN']}>
+                  <AnalystPremiseStatusPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="admin"
+              element={
+                <ProtectedRoute roles={['ADMIN']}>
+                  <V2AdminOverviewPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/premises"
+              element={
+                <ProtectedRoute roles={['ADMIN']}>
+                  <AdminPremisesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/premises/:id"
+              element={
+                <ProtectedRoute roles={['ADMIN']}>
+                  <AdminPremiseEditPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/premises/:premiseId/qr-codes"
+              element={
+                <ProtectedRoute roles={['ADMIN']}>
+                  <AdminQRCodesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/assignments"
+              element={
+                <ProtectedRoute roles={['ADMIN']}>
+                  <AdminAssignmentsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/analyst-assignments"
+              element={
+                <ProtectedRoute roles={['ADMIN']}>
+                  <AdminAnalystAssignmentsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/users"
+              element={
+                <ProtectedRoute roles={['ADMIN']}>
+                  <AdminUsersPage />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
 
           {/* Default redirect */}
           <Route path="/" element={<HomeRedirect />} />

@@ -14,6 +14,19 @@ function getDefaultRouteForRole(role?: string) {
   }
 }
 
+function getDefaultV2RouteForRole(role?: string) {
+  switch (role) {
+    case 'ADMIN':
+      return '/v2/admin';
+    case 'ANALYST':
+      return '/v2/analyst';
+    case 'GUARD':
+      return '/v2/guard';
+    default:
+      return '/login';
+  }
+}
+
 export default function HomeRedirect() {
   const { isAuthenticated, user, isLoading } = useAuth();
   const location = useLocation();
@@ -24,6 +37,10 @@ export default function HomeRedirect() {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
+  const uiVersion = localStorage.getItem('uiVersion');
+  if (uiVersion === 'v2') {
+    return <Navigate to={getDefaultV2RouteForRole(user.role)} replace />;
+  }
+
   return <Navigate to={getDefaultRouteForRole(user.role)} replace />;
 }
-

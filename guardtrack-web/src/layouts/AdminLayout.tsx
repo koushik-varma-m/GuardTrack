@@ -21,6 +21,11 @@ export default function AdminLayout() {
     navigate('/login');
   };
 
+  const switchToV2 = () => {
+    localStorage.setItem('uiVersion', 'v2');
+    navigate('/v2');
+  };
+
   const getCurrentTab = () => {
     if (location.pathname.includes('/admin/premises')) return 0;
     if (location.pathname.includes('/admin/assignments')) return 1;
@@ -72,6 +77,13 @@ export default function AdminLayout() {
             <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
               {user?.name}
             </Typography>
+            <Button
+              color="inherit"
+              onClick={switchToV2}
+              sx={{ textTransform: 'none', fontWeight: 500, opacity: 0.9 }}
+            >
+              UI v2
+            </Button>
             <Button 
               color="inherit" 
               onClick={handleLogout}
