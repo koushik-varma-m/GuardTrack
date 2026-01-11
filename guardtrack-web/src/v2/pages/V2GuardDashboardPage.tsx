@@ -12,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import {
-  QrCodeScanner as QrCodeScannerIcon,
+  FactCheck as CheckInIcon,
   Schedule as ScheduleIcon,
   Map as MapIcon,
   History as HistoryIcon,
@@ -82,8 +82,13 @@ export default function V2GuardDashboardPage() {
           <Button variant="outlined" onClick={load}>
             Refresh
           </Button>
-          <Button variant="contained" startIcon={<QrCodeScannerIcon />} disabled={!assignment} onClick={() => navigate('/v2/guard/scan')}>
-            Scan
+          <Button
+            variant="contained"
+            startIcon={<CheckInIcon />}
+            disabled={!assignment}
+            onClick={() => navigate('/v2/guard/scan')}
+          >
+            Check In
           </Button>
         </Stack>
       </Stack>

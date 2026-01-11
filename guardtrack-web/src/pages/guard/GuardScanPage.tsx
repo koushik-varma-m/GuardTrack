@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -11,20 +11,17 @@ import {
   TextField,
   Snackbar,
   Alert,
-  CircularProgress,
   Chip,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
 } from '@mui/material';
-import { QrCodeScanner as QrCodeScannerIcon, Edit as EditIcon } from '@mui/icons-material';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Edit as EditIcon } from '@mui/icons-material';
 import { guardService } from '../../services/guardService';
 import type { CheckInResponse, NextCheckpointResponse, Checkpoint } from '../../services/guardService';
 
 export default function GuardScanPage() {
-  const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<CheckInResponse | null>(null);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -43,22 +40,10 @@ export default function GuardScanPage() {
   const [myCheckpoints, setMyCheckpoints] = useState<Checkpoint[]>([]);
   const [selectedCheckpointId, setSelectedCheckpointId] = useState<string>('');
   const [rfidTag, setRfidTag] = useState('');
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const qrCodeRegionId = 'qr-reader';
 
   useEffect(() => {
     loadNextCheckpoint();
     loadCheckpoints();
-    return () => {
-      // Cleanup scanner on unmount
-      if (scannerRef.current) {
-        scannerRef.current
-          .stop()
-          .catch(() => {
-            // Ignore errors during cleanup
-          });
-      }
-    };
   }, []);
 
   const loadNextCheckpoint = async () => {
@@ -108,97 +93,6 @@ export default function GuardScanPage() {
         return;
       }
       console.warn('Failed to load checkpoints', err);
-    }
-  };
-
-  const startScanning = async () => {
-    try {
-      setError('');
-      setScanning(true);
-      setResult(null);
-
-      const html5QrCode = new Html5Qrcode(qrCodeRegionId);
-      scannerRef.current = html5QrCode;
-
-      await html5QrCode.start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-        },
-        (decodedText) => {
-          handleQrCodeDetected(decodedText);
-        },
-        () => {
-          // Ignore scanning errors
-        }
-      );
-    } catch (err: any) {
-      setError(err.message || 'Failed to start camera');
-      setScanning(false);
-    }
-  };
-
-  const stopScanning = async () => {
-    if (scannerRef.current) {
-      try {
-        await scannerRef.current.stop();
-        await scannerRef.current.clear();
-      } catch {
-        // Ignore errors
-      }
-      scannerRef.current = null;
-    }
-    setScanning(false);
-  };
-
-  const handleQrCodeDetected = async (decodedText: string) => {
-    try {
-      // Parse JSON from QR code
-      const qrData = JSON.parse(decodedText);
-
-      if (!qrData.checkpointId) {
-        setError('Invalid QR code format');
-        return;
-      }
-
-      const token =
-        typeof qrData.token === 'string' ? (qrData.token as string) : undefined;
-
-      await stopScanning();
-      
-      // Pre-check if guard can scan this checkpoint
-      try {
-        const canScan = await guardService.canScanCheckpoint(qrData.checkpointId);
-        if (!canScan.canScan) {
-          if (canScan.code === 'CHECKPOINT_NOT_DUE') {
-            const due = canScan.dueTime ? new Date(canScan.dueTime).toLocaleTimeString() : null;
-            const name = canScan.nextCheckpointName;
-            setError(due && name ? `Not due yet. Wait until ${due} to scan "${name}".` : (canScan.error || 'Not due yet.'));
-            return;
-          }
-          if (canScan.code === 'SEQUENCE_ENFORCED') {
-            const name = canScan.nextCheckpointName;
-            const due = canScan.dueTime ? new Date(canScan.dueTime).toLocaleTimeString() : null;
-            setError(name && due ? `Next expected checkpoint: "${name}" (due at ${due}).` : (canScan.error || 'Please scan checkpoints in order.'));
-            return;
-          }
-          setError(canScan.error || 'You are not authorized to scan this checkpoint');
-          return;
-        }
-      } catch (preCheckErr: any) {
-        // If pre-check fails, still try to scan (backend will validate)
-        console.warn('Pre-check failed, proceeding with scan:', preCheckErr);
-      }
-
-      await createCheckIn(qrData.checkpointId, token);
-    } catch (err: any) {
-      if (err instanceof SyntaxError) {
-        setError('Invalid QR code format');
-      } else {
-        setError(err.message || 'Failed to process QR code');
-      }
-      await stopScanning();
     }
   };
 
@@ -301,7 +195,7 @@ export default function GuardScanPage() {
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Scan Checkpoint
+        Check In
       </Typography>
 
       {info && (
@@ -343,56 +237,44 @@ export default function GuardScanPage() {
 
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-          <Typography variant="h6">QR Code Scanner</Typography>
-          <Button
-            variant="outlined"
-            startIcon={<EditIcon />}
-            onClick={() => setManualDialog(true)}
-          >
-            Manual Entry
+          <Typography variant="h6">Manual Check-in</Typography>
+          <Button variant="outlined" startIcon={<EditIcon />} onClick={() => setManualDialog(true)}>
+            Enter Checkpoint ID
           </Button>
         </Box>
-
-        {!scanning ? (
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              p: 4,
-              border: '2px dashed #ccc',
-              borderRadius: 2,
-            }}
-          >
-            <QrCodeScannerIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-            <Button
-              variant="contained"
-              size="large"
-              onClick={startScanning}
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          QR scanning is disabled. Select a checkpoint and submit a check-in, or use RFID below.
+        </Typography>
+        <Box display="flex" flexDirection="column" gap={2}>
+          <FormControl fullWidth>
+            <InputLabel>Checkpoint</InputLabel>
+            <Select
+              value={selectedCheckpointId}
+              label="Checkpoint"
+              onChange={(e) => setSelectedCheckpointId(e.target.value)}
               disabled={submitting || !!info}
             >
-              Start Scanning
-            </Button>
-          </Box>
-        ) : (
-          <Box>
-            <div id={qrCodeRegionId} style={{ width: '100%' }} />
-            <Button
-              variant="outlined"
-              onClick={stopScanning}
-              fullWidth
-              sx={{ mt: 2 }}
-            >
-              Stop Scanning
-            </Button>
-          </Box>
-        )}
-
-        {submitting && (
-          <Box display="flex" justifyContent="center" alignItems="center" p={4}>
-            <CircularProgress />
-          </Box>
-        )}
+              {myCheckpoints.length === 0 && (
+                <MenuItem value="" disabled>
+                  No checkpoints found
+                </MenuItem>
+              )}
+              {myCheckpoints.map((cp) => (
+                <MenuItem key={cp.id} value={cp.id}>
+                  {cp.sequence ? `${cp.sequence}. ${cp.name}` : cp.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button
+            variant="contained"
+            size="large"
+            disabled={submitting || !!info || !selectedCheckpointId}
+            onClick={() => createCheckIn(selectedCheckpointId)}
+          >
+            {submitting ? 'Submitting...' : 'Submit Check-in'}
+          </Button>
+        </Box>
       </Paper>
 
       <Paper sx={{ p: 3, mb: 3 }}>

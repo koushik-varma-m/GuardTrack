@@ -19,7 +19,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import {
   Menu as MenuIcon,
   SpaceDashboard as DashboardIcon,
-  QrCodeScanner as ScanIcon,
+  FactCheck as CheckInIcon,
   Map as MapIcon,
   People as PeopleIcon,
   Schedule as ScheduleIcon,
@@ -94,9 +94,9 @@ function getNavItems(role: string): NavItem[] {
       match: (p) => p === '/v2/guard',
     },
     {
-      label: 'Scan',
+      label: 'Check In',
       to: '/v2/guard/scan',
-      icon: <ScanIcon fontSize="small" />,
+      icon: <CheckInIcon fontSize="small" />,
       match: (p) => p.startsWith('/v2/guard/scan'),
     },
     {

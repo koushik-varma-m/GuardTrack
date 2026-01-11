@@ -208,7 +208,7 @@ export default function GuardDashboardPage() {
                   size="large"
                   disabled={!assignment}
                 >
-                  Go to Scan
+                  Check In
                 </Button>
                 <Button
                   variant="outlined"

@@ -14,7 +14,6 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
-import { QrCodeScanner as QrCodeScannerIcon } from '@mui/icons-material';
 import { guardService } from '../../services/guardService';
 import type { Checkpoint } from '../../services/guardService';
 
@@ -63,10 +62,9 @@ export default function GuardCheckpointsPage() {
         <Typography variant="h4">My Checkpoints</Typography>
         <Button
           variant="contained"
-          startIcon={<QrCodeScannerIcon />}
           onClick={() => navigate('/guard/scan')}
         >
-          Scan QR
+          Check In
         </Button>
       </Box>
 
