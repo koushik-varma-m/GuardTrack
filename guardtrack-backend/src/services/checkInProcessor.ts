@@ -1,5 +1,8 @@
 import { prisma } from '../config/prisma';
 import { verifyCheckpointToken } from '../utils/qr';
+import type { Prisma, PrismaClient } from '@prisma/client';
+
+type DbClient = PrismaClient | Prisma.TransactionClient;
 
 export class HttpError extends Error {
   status: number;
@@ -35,6 +38,7 @@ interface ProcessCheckInInput {
   checkpointId: string;
   token?: string;
   skipTokenValidation?: boolean;
+  db?: DbClient;
 }
 
 /**
@@ -46,10 +50,12 @@ export async function processCheckIn({
   checkpointId,
   token,
   skipTokenValidation = false,
+  db: providedDb,
 }: ProcessCheckInInput): Promise<CheckInResult> {
+  const db = providedDb ?? prisma;
   const toMs = (minutes: number) => minutes * 60_000;
   const orangeThresholdMs = toMs(5);
-  const checkpoint = await prisma.checkpoint.findUnique({
+  const checkpoint = await db.checkpoint.findUnique({
     where: { id: checkpointId },
     include: {
       premise: true,
@@ -71,7 +77,7 @@ export async function processCheckIn({
     }
   }
 
-  const guard = await prisma.user.findUnique({
+  const guard = await db.user.findUnique({
     where: { id: guardId },
     select: { id: true, role: true, name: true },
   });
@@ -86,7 +92,7 @@ export async function processCheckIn({
 
   const now = new Date();
 
-  const assignment = await prisma.guardAssignment.findFirst({
+  const assignment = await db.guardAssignment.findFirst({
     where: {
       guardId,
       premiseId: checkpoint.premiseId,
@@ -108,7 +114,7 @@ export async function processCheckIn({
   });
 
   if (!assignment) {
-    const anyAssignment = await prisma.guardAssignment.findFirst({
+    const anyAssignment = await db.guardAssignment.findFirst({
       where: { guardId },
       include: {
         premise: {
@@ -125,7 +131,7 @@ export async function processCheckIn({
       );
     }
 
-    const inactiveAssignment = await prisma.guardAssignment.findFirst({
+    const inactiveAssignment = await db.guardAssignment.findFirst({
       where: {
         guardId,
         premiseId: checkpoint.premiseId,
@@ -163,7 +169,7 @@ export async function processCheckIn({
     );
   }
 
-  const premiseCheckpoints = await prisma.checkpoint.findMany({
+  const premiseCheckpoints = await db.checkpoint.findMany({
     where: { premiseId: checkpoint.premiseId },
     select: { id: true, sequence: true, name: true, intervalMinutes: true },
     orderBy: [
@@ -189,7 +195,7 @@ export async function processCheckIn({
       return a.name.localeCompare(b.name);
     });
 
-  const lastCheckIn = await prisma.checkIn.findFirst({
+  const lastCheckIn = await db.checkIn.findFirst({
     where: {
       guardId,
       assignmentId: assignment.id,
@@ -214,7 +220,7 @@ export async function processCheckIn({
     return orderedCheckpoints[nextIndex];
   })();
 
-  const resolvedExpected = await prisma.alert.findFirst({
+  const resolvedExpected = await db.alert.findFirst({
     where: {
       guardId,
       assignmentId: assignment.id,
@@ -313,7 +319,7 @@ export async function processCheckIn({
           overriddenAt: now,
         };
 
-  const checkIn = await prisma.checkIn.create({
+  const checkIn = await db.checkIn.create({
     data: {
       guardId,
       checkpointId,

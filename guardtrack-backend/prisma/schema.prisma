@@ -74,6 +74,7 @@ model Checkpoint {
 
   checkIns        CheckIn[]
   alerts          Alert[]
+  kioskChallenges KioskChallenge[]
 }
 
 model GuardAssignment {
@@ -142,4 +143,16 @@ model AnalystAssignment {
   updatedAt DateTime @updatedAt
 
   @@unique([analystId, premiseId])
+}
+
+model KioskChallenge {
+  id           String     @id @default(cuid())
+  nonce        String     @unique
+  checkpoint   Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  checkpointId String
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime   @default(now())
+
+  @@index([checkpointId, expiresAt])
 }
