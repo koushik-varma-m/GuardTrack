@@ -49,7 +49,7 @@ export default function V2AdminOverviewPage() {
         <Box>
           <Typography variant="h4">Admin Overview</Typography>
           <Typography variant="body2" color="text.secondary">
-            Quick access to management and upcoming shifts
+            Zentech • quick access to management and upcoming shifts
           </Typography>
         </Box>
         <Button startIcon={<RefreshIcon />} variant="outlined" onClick={load} disabled={loading}>
@@ -161,4 +161,3 @@ export default function V2AdminOverviewPage() {
     </Box>
   );
 }
-

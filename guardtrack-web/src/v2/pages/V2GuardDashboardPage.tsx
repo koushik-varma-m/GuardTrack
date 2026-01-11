@@ -75,7 +75,7 @@ export default function V2GuardDashboardPage() {
         <Box>
           <Typography variant="h4">Guard Dashboard</Typography>
           <Typography variant="body2" color="text.secondary">
-            Clean overview for your shift and upcoming schedule
+            Zentech • clean overview for your shift and upcoming schedule
           </Typography>
         </Box>
         <Stack direction="row" gap={1}>
@@ -223,4 +223,3 @@ export default function V2GuardDashboardPage() {
     </Box>
   );
 }
-

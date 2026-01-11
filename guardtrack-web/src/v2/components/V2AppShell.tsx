@@ -149,7 +149,7 @@ export default function V2AppShell() {
         </Box>
         <Box sx={{ minWidth: 0 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.1 }}>
-            Guard Track
+            Zentech
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             UI v2 • {role.toLowerCase()}

@@ -70,7 +70,7 @@ export default function V2AnalystDashboardPage() {
         <Box>
           <Typography variant="h4">Analyst Dashboard</Typography>
           <Typography variant="body2" color="text.secondary">
-            Alerts, assigned premises, and upcoming shifts
+            Zentech • alerts, assigned premises, and upcoming shifts
           </Typography>
         </Box>
         <Button startIcon={<RefreshIcon />} variant="outlined" onClick={load} disabled={loading}>
@@ -237,4 +237,3 @@ export default function V2AnalystDashboardPage() {
     </Box>
   );
 }
-
